@@ -313,7 +313,7 @@ var gallery = {
                 for (var i = 0; i < batch.length; i++) {
                     batch[i].thumbUrl = thumbUrls[batch[i].id] || '';
                     // Оригинальный URL сформируем при открытии просмотра
-                    batch[i].originalUrl = 'https://drive.google.com/uc?export=download&id=' + batch[i].file_id;
+                    batch[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + batch[i].file_id + '&size=original';
                 }
 
                 // Если это первая загрузка — очищаем контейнер

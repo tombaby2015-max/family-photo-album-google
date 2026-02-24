@@ -437,17 +437,14 @@ var admin = {
 
     // === БЭКАП #8: скачиваем файл И сохраняем в Google Drive ===
     manualBackup: function() {
-        var self = this;
-        api.createBackup().then(function(result) {
-            if (result.success) {
-                // Файл уже скачался автоматически через api.js
-                // Дополнительно сохраняем в Google Drive
-                self.saveBackupToDrive(result.backup);
-            } else {
-                alert('❌ Ошибка бэкапа');
-            }
-        });
-    },
+    api.createBackup().then(function(result) {
+        if (result.success) {
+            alert('✅ Бэкап скачан на компьютер!');
+        } else {
+            alert('❌ Ошибка бэкапа');
+        }
+    });
+},
 
     saveBackupToDrive: function(backupData) {
         if (!backupData) return;

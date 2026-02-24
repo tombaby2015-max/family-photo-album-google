@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Фотоальбом</title>
+    <meta property="og:title" content="Фотоальбом" />
+    <meta property="og:description" content="Семейный фотоархив" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- Стили Tilda -->
+    <link rel="stylesheet" href="https://static.tildacdn.ink/css/tilda-grid-3.0.min.css" type="text/css" media="all"/>
+    <link rel="stylesheet" href="https://static.tildacdn.ink/ws/project21315616/tilda-blocks-page115165096.min.css?t=1769977321" type="text/css" media="all" />
+    <link rel="stylesheet" href="https://static.tildacdn.ink/css/tilda-cover-1.0.min.css" type="text/css" media="all" />
+    <link rel="stylesheet" href="https://static.tildacdn.ink/css/tilda-slds-1.4.min.css" type="text/css" media="print" onload="this.media='all';" />
+    <noscript><link rel="stylesheet" href="https://static.tildacdn.ink/css/tilda-slds-1.4.min.css" type="text/css" media="all" /></noscript>
+    <link rel="stylesheet" href="https://static.tildacdn.ink/css/tilda-cards-1.0.min.css" type="text/css" media="all" />
+    <link rel="stylesheet" href="https://static.tildacdn.ink/css/fonts-tildasans.css" type="text/css" media="all" />
+
+    <!-- Наши стили -->
+    <link rel="stylesheet" href="css/custom.css" type="text/css" media="all" />
+
+    <!-- SortableJS для перетаскивания папок -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+    <!-- Tilda scripts -->
+    <script src="https://static.tildacdn.ink/js/tilda-scripts-3.0.min.js" charset="utf-8" defer></script>
+    <script src="https://static.tildacdn.ink/js/tilda-lazyload-1.0.min.js" charset="utf-8" async></script>
+    <script src="https://static.tildacdn.ink/js/tilda-cover-1.0.min.js" charset="utf-8" async></script>
+</head>
+<body class="t-body" style="margin:0;">
+
+    <!-- ОБЛОЖКА САЙТА -->
+    <div id="rec-cover" class="r t-rec" style="" data-animationappear="off" data-record-type="18">
+        <div class="t-cover" id="recorddiv-cover" bgimgfield="img" style="height:100vh;background-image:url('https://thb.tildacdn.ink/tild3730-6566-4766-b165-306164333335/-/resize/20x/photo-1499002238440-.jpg');">
+            <div class="t-cover__carrier" id="coverCarry"
+                data-content-cover-id="rec-cover"
+                data-content-cover-bg="https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg"
+                data-display-changed="true"
+                data-content-cover-height="100vh"
+                data-content-cover-parallax="fixed"
+                style="height:100vh;"
+                itemscope itemtype="http://schema.org/ImageObject">
+                <meta itemprop="image" content="https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg">
+            </div>
+            <div class="t-cover__filter" style="height:100vh;background-image: linear-gradient(to bottom, rgba(0,0,0,0.30), rgba(0,0,0,0.70));"></div>
+            <div class="t-container">
+                <div class="t-col t-col_12">
+                    <div class="t-cover__wrapper t-valign_middle" style="height:100vh;">
+                        <div class="t001 t-align_center">
+                            <div class="t001__wrapper" data-hook-content="covercontent">
+                                <div class="t001__title t-title t-title_xl" style="text-transform:uppercase;"><strong>ФОТОАЛЬБОМ</strong></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="t-cover__arrow" onclick="scrollToFolders()">
+                <div class="t-cover__arrow-wrapper t-cover__arrow-wrapper_animated">
+                    <div class="t-cover__arrow_mobile">
+                        <svg role="presentation" class="t-cover__arrow-svg" style="fill:#ffffff;" x="0px" y="0px" width="38.417px" height="18.592px" viewBox="0 0 38.417 18.592">
+                            <g><path d="M19.208,18.592c-0.241,0-0.483-0.087-0.673-0.261L0.327,1.74c-0.408-0.372-0.438-1.004-0.066-1.413c0.372-0.409,1.004-0.439,1.413-0.066L19.208,16.24L36.743,0.261c0.411-0.372,1.042-0.342,1.413,0.066c0.372,0.408,0.343,1.041-0.065,1.413L19.881,18.332C19.691,18.505,19.449,18.592,19.208,18.592z"/></g>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ГЛАВНАЯ СТРАНИЦА С ПАПКАМИ -->
+    <div id="main-page">
+
+        <!-- ПАНЕЛЬ АДМИНИСТРАТОРА -->
+        <div id="admin-panel" class="admin-panel" style="display:none;">
+            <div class="t-container">
+                <div class="t-col t-col_12">
+                    <div class="admin-panel__title">Панель администратора</div>
+                    <div class="admin-panel__buttons">
+                        <button class="admin-btn" onclick="admin.syncWithDrive(this)">🔄 Синхронизировать</button>
+                        <button class="admin-btn" onclick="admin.manualBackup()">💾 Сделать бэкап</button>
+                        <button class="admin-btn" onclick="admin.restoreFromBackup()">♻️ Восстановить из бэкапа</button>
+                        <button class="admin-btn" onclick="admin.viewStorage()">👁️ Посмотреть хранилище</button>
+                        <button class="admin-btn" onclick="admin.reloadPage()">🔄 Обновить страницу</button>
+                        <button class="admin-btn" onclick="admin.openClearStorageModal()" style="background:#e74c3c;color:#fff;border-color:#c0392b;">🗑️ Удалить хранилище</button>
+                        <button class="admin-btn logout" onclick="admin.logout()">Выйти</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ПАПКИ -->
+        <div id="rec-folders" class="r t-rec t-rec_pt_30" style="padding-top:30px;" data-record-type="147">
+            <div class="t214">
+                <ul id="folders-container" class="t214__container t-card__container t-container t-container_flex">
+                    <li class="loading">Загрузка папок...</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- РАЗДЕЛИТЕЛЬ -->
+        <div id="rec-divider" class="r t-rec t-rec_pt_60 t-rec_pb_60" style="padding-top:60px;padding-bottom:60px;" data-record-type="363">
+            <div class="t029">
+                <div class="t029__container t-container">
+                    <div class="t029__col t-col t-col_8">
+                        <div class="t029__linewrapper" style="opacity:0.2;">
+                            <div class="t029__opacity t029__opacity_left" style="background-image: linear-gradient(to left, #000000, rgba(0,0,0,0));"></div>
+                            <div class="t-divider t029__line" style="background: #000000;"></div>
+                            <div class="t029__opacity t029__opacity_right" style="background-image: linear-gradient(to right, #000000, rgba(0,0,0,0));"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- СТРАНИЦА ПАПКИ С ФОТО -->
+    <div id="folder-page" style="display:none;">
+        <div class="folder-cover-strip">
+            <div class="folder-cover-strip__image" id="folder-cover-image"></div>
+        </div>
+
+        <div class="folder-title-bar">
+            <h2 id="folder-title-text"></h2>
+        </div>
+
+        <div class="folder-content">
+            <div class="folder-sidebar">
+                <a href="#" class="back-link" onclick="gallery.showMainPage(); return false;">
+                    <span class="back-arrow">←</span>Назад к папкам
+                </a>
+
+                <!-- Кнопки для администратора внутри папки -->
+                <div class="sidebar-admin-buttons" id="sidebar-admin-buttons" style="display:none; margin-top: 20px;">
+                    <button class="admin-btn" id="btn-enter-selection" onclick="admin.enterSelectionMode()" style="width:100%;margin-bottom:10px;">
+                        Выбрать фото
+                    </button>
+                    <div id="selection-toolbar" style="display:none;flex-direction:column;gap:8px;">
+                        <button class="admin-btn" id="btn-select-all" onclick="admin.toggleSelectAll()" style="width:100%;">Выбрать все</button>
+                        <button class="admin-btn danger" id="btn-delete-selected" onclick="admin.deleteSelectedPhotos()" disabled style="width:100%;opacity:0.5;">Удалить выбранные (0)</button>
+                        <button class="admin-btn" id="btn-hide-selected" onclick="admin.hideSelectedPhotos(true)" disabled style="width:100%;opacity:0.5;">Скрыть выбранные (0)</button>
+                        <button class="admin-btn" onclick="admin.exitSelectionMode()" style="width:100%;">✕ Отмена</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="photos-grid" id="photos-container">
+                <div class="loading">Загрузка фото...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ОКНО ОЧИСТКИ ХРАНИЛИЩА -->
+    <div id="clear-storage-modal" class="admin-modal" style="display:none;z-index:10001;">
+        <div class="admin-modal__overlay" onclick="admin.closeClearStorageModal()"></div>
+        <div class="admin-modal__content" style="border:3px solid #e74c3c;max-width:450px;">
+            <h3 style="color:#e74c3c;margin:0 0 15px 0;font-size:22px;">⚠️ ВНИМАНИЕ!</h3>
+            <p style="color:#666;margin-bottom:25px;font-size:15px;line-height:1.5;">
+                Это удалит все папки и фото из хранилища настроек.<br>
+                <strong>Сами файлы в Google Drive останутся!</strong>
+            </p>
+            <input type="password" id="clear-storage-password" placeholder="Введите пароль администратора" style="margin-bottom:25px;">
+            <div style="display:flex;gap:15px;justify-content:center;">
+                <button onclick="admin.confirmClearStorage()" style="background:#e74c3c;color:#fff;border:none;padding:12px 30px;border-radius:4px;font-size:16px;cursor:pointer;flex:1;">🗑️ Удалить всё</button>
+                <button onclick="admin.closeClearStorageModal()" style="background:#999;color:#fff;border:none;padding:12px 30px;border-radius:4px;font-size:16px;cursor:pointer;flex:1;">Отмена</button>
+            </div>
+            <p id="clear-storage-error" class="admin-error" style="margin-top:15px;"></p>
+        </div>
+    </div>
+
+    <!-- ОКНО ВХОДА В АДМИНКУ -->
+    <div id="admin-modal" class="admin-modal" style="display:none;">
+        <div class="admin-modal__overlay" onclick="admin.closeModal()"></div>
+        <div class="admin-modal__content">
+            <h3>Вход в админку</h3>
+            <input type="password" id="admin-password" placeholder="Введите пароль">
+            <button onclick="admin.login()">Войти</button>
+            <p id="admin-error" class="admin-error"></p>
+        </div>
+    </div>
+
+    <!-- ПОЛНОЭКРАННЫЙ ПРОСМОТР ФОТО -->
+    <div id="fullscreen-viewer" class="fullscreen-viewer" style="display:none;">
+        <div class="fullscreen-viewer__overlay" onclick="gallery.closeFullscreen()"></div>
+        <button class="fullscreen-viewer__close" onclick="gallery.closeFullscreen()">×</button>
+        <div class="fullscreen-viewer__wrapper">
+            <button class="fullscreen-viewer__nav fullscreen-viewer__prev" onclick="gallery.prevPhoto()">‹</button>
+            <div class="fullscreen-viewer__image-container">
+                <img id="fullscreen-image" src="" alt="">
+            </div>
+            <button class="fullscreen-viewer__nav fullscreen-viewer__next" onclick="gallery.nextPhoto()">›</button>
+        </div>
+        <div class="fullscreen-viewer__buttons" id="fullscreen-buttons">
+            <button class="viewer-btn" onclick="admin.setFolderCover()" id="btn-set-cover" style="display:none;">Превью папки</button>
+            <a id="download-link" class="fullscreen-viewer__download" href="" download>Скачать оригинал</a>
+            <button class="viewer-btn danger" onclick="admin.deleteCurrentPhoto()" id="btn-delete-photo" style="display:none;">Удалить</button>
+        </div>
+    </div>
+
+    <!-- ФУТЕР -->
+    <div id="main-footer" class="t-tildalabel t-tildalabel-free">
+        <div class="t-tildalabel-free__main">
+            <a href="#" onclick="admin.openModal(); return false;" style="display:inline-block;padding:10px 20px;font-size:13px;border-radius:50px;background-color:#fff;color:#000;text-decoration:none;margin:20px 0;">Админ</a>
+        </div>
+    </div>
+
+    <!-- Скрипты -->
+    <script src="js/api.js"></script>
+    <script src="js/gallery.js"></script>
+    <script src="js/admin.js"></script>
+</body>
+</html>

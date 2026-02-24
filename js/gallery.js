@@ -88,7 +88,7 @@ var gallery = {
         }
     },
 
-    // FIX #2: обложка папки через наш сервер
+    // Обложка папки — только если задана вручную, иначе серый фон
     loadFolderCover: function(folder) {
         var self = this;
         var imgEl = document.getElementById('folder-image-' + folder.id);
@@ -97,15 +97,8 @@ var gallery = {
         if (folder.cover_url) {
             var thumbUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
             self.applyFolderCover(imgEl, thumbUrl, folder);
-            return;
         }
-
-        api.getPhotosList(folder.id).then(function(photos) {
-            if (photos.length > 0) {
-                var thumbUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + photos[0].file_id + '&size=thumb';
-                self.applyFolderCover(imgEl, thumbUrl, folder);
-            }
-        });
+        // Нет обложки — оставляем серый фон, ничего не делаем
     },
 
     applyFolderCover: function(imgEl, url, folder) {
@@ -150,7 +143,7 @@ var gallery = {
 
         return '<li id="folder-' + folder.id + '" class="t214__col t-item t-card__col t-col t-col_4 folder-card ' + hiddenClass + (isEditing ? ' editing' : '') + '" data-folder-id="' + folder.id + '">' +
             '<div class="folder-card__image" id="folder-image-' + folder.id + '" style="background-color:#eee;">' +
-                '<div class="folder-card__title">' + folder.title + '</div>' +
+                '<div class="folder-card__title">' + folder.title + (folder.photo_count > 0 ? ' <span style="font-size:13px;opacity:0.8;font-weight:400;">(' + folder.photo_count + ' фото)</span>' : '') + '</div>' +
                 adminActions +
                 previewEditor +
             '</div>' +
@@ -245,13 +238,13 @@ var gallery = {
 
         document.getElementById('folder-title-text').textContent = folder.title;
 
-        // Полоска вверху — всегда главное фото сайта, не обложка папки
-var coverEl = document.getElementById('folder-cover-image');
-if (coverEl) {
-    coverEl.style.backgroundImage = 'url(\'https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg\')';
-    coverEl.style.backgroundSize = 'cover';
-    coverEl.style.backgroundPosition = 'center';
-}
+        // Полоска вверху — всегда главное фото сайта
+        var coverEl = document.getElementById('folder-cover-image');
+        if (coverEl) {
+            coverEl.style.backgroundImage = "url('https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg')";
+            coverEl.style.backgroundSize = 'cover';
+            coverEl.style.backgroundPosition = 'center';
+        }
 
         var sidebarBtns = document.getElementById('sidebar-admin-buttons');
         if (sidebarBtns) {

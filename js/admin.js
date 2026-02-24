@@ -446,25 +446,6 @@ var admin = {
     });
 },
 
-    saveBackupToDrive: function(backupData) {
-        if (!backupData) return;
-        // Отправляем бэкап на сервер чтобы он сохранил в Drive
-        fetch('https://photo-backend.belovolov-email.workers.dev/admin/backup-to-drive', {
-            method: 'POST',
-            headers: api.getHeaders(true),
-            body: JSON.stringify(backupData)
-        }).then(function(r) { return r.json(); })
-          .then(function(result) {
-            if (result.success) {
-                alert('✅ Бэкап скачан и сохранён в Google Drive!');
-            } else {
-                alert('✅ Бэкап скачан на компьютер.\n⚠️ В Google Drive не сохранился: ' + (result.error || ''));
-            }
-        }).catch(function() {
-            alert('✅ Бэкап скачан на компьютер.\n⚠️ В Google Drive не сохранился (ошибка соединения)');
-        });
-    },
-
     restoreFromBackup: function() {
         var input = document.getElementById('restore-backup-file');
         if (!input) {

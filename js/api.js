@@ -154,7 +154,10 @@ var api = {
                 var url = URL.createObjectURL(blob);
                 var a = document.createElement('a');
                 a.href = url;
-                a.download = 'backup-' + new Date().toISOString().slice(0,10) + '.json';
+                var now = new Date();
+var date = now.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+var time = now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+a.download = 'Бэкап сайта Фотоальбом ' + date + ' ' + time + '.json';
                 a.click();
                 URL.revokeObjectURL(url);
             }

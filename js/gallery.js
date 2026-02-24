@@ -4,8 +4,8 @@ var BATCH_SIZE = 40;
 
 var gallery = {
     folders: [],
-    currentPhotos: [],      // все фото текущей папки
-    visiblePhotos: [],      // фото которые сейчас видны на странице
+    currentPhotos: [],
+    visiblePhotos: [],
     currentFolder: null,
     currentPhotoIndex: 0,
     editingFolder: null,
@@ -63,12 +63,10 @@ var gallery = {
         }
         container.innerHTML = html;
 
-        // Загружаем обложки папок
         for (var k = 0; k < self.folders.length; k++) {
             self.loadFolderCover(self.folders[k]);
         }
 
-        // Клики по папкам
         for (var j = 0; j < self.folders.length; j++) {
             (function(folder) {
                 var card = document.getElementById('folder-' + folder.id);
@@ -83,7 +81,6 @@ var gallery = {
             })(self.folders[j]);
         }
 
-        // Drag & drop для сортировки (только для админа на компьютере)
         if (api.isAdmin() && typeof Sortable !== 'undefined') {
             setTimeout(function() {
                 if (typeof admin !== 'undefined') admin.initSortable();
@@ -91,30 +88,21 @@ var gallery = {
         }
     },
 
-    // Загружаем обложку папки (первое фото или заданная обложка)
+    // FIX #2: обложка папки через наш сервер
     loadFolderCover: function(folder) {
         var self = this;
         var imgEl = document.getElementById('folder-image-' + folder.id);
         if (!imgEl) return;
 
-        // Если у папки есть заданная обложка
-        if (folder.cover_url && folder.cover_url.startsWith('https://drive.google.com')) {
-            // Уже есть прямая ссылка — применяем
-            self.applyFolderCover(imgEl, folder.cover_url, folder);
-            return;
-        }
-
         if (folder.cover_url) {
-            // cover_url содержит Google Drive file_id — строим ссылку на миниатюру
-            var thumbUrl = 'https://drive.google.com/thumbnail?id=' + folder.cover_url + '&sz=w800';
+            var thumbUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
             self.applyFolderCover(imgEl, thumbUrl, folder);
             return;
         }
 
-        // Нет обложки — берём первое фото из папки
         api.getPhotosList(folder.id).then(function(photos) {
             if (photos.length > 0) {
-                var thumbUrl = 'https://drive.google.com/thumbnail?id=' + photos[0].file_id + '&sz=w800';
+                var thumbUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + photos[0].file_id + '&size=thumb';
                 self.applyFolderCover(imgEl, thumbUrl, folder);
             }
         });
@@ -127,7 +115,7 @@ var gallery = {
         imgEl.style.backgroundImage = 'url(\'' + url + '\')';
         imgEl.style.backgroundPosition = x + '% ' + y + '%';
         imgEl.style.backgroundSize = scale + '%';
-        imgEl.dataset.coverUrl = url;
+        imgEl.dataset.fileId = folder.cover_url || '';
     },
 
     createFolderCard: function(folder) {
@@ -145,6 +133,7 @@ var gallery = {
                 '</div>';
         }
 
+        // FIX #7: кнопки − Сохранить + симметрично
         var previewEditor = '';
         if (isEditing) {
             previewEditor =
@@ -154,8 +143,8 @@ var gallery = {
                 '<button class="preview-editor__btn left" onclick="gallery.movePreview(-10, 0)">←</button>' +
                 '<button class="preview-editor__btn right" onclick="gallery.movePreview(10, 0)">→</button>' +
                 '<button class="preview-editor__btn zoom-out" onclick="gallery.zoomPreview(-10)">−</button>' +
-                '<button class="preview-editor__btn zoom-in" onclick="gallery.zoomPreview(10)">+</button>' +
                 '<button class="preview-editor__btn save" onclick="gallery.savePreview()">Сохранить</button>' +
+                '<button class="preview-editor__btn zoom-in" onclick="gallery.zoomPreview(10)">+</button>' +
                 '</div>';
         }
 
@@ -168,7 +157,7 @@ var gallery = {
         '</li>';
     },
 
-    // === РЕДАКТОР ПОЛОЖЕНИЯ ОБЛОЖКИ ===
+    // === РЕДАКТОР ОБЛОЖКИ ===
     startEditPreview: function(folderId) {
         var self = this;
         var folder = null;
@@ -186,19 +175,18 @@ var gallery = {
 
         self.renderFolders();
 
-        // Восстанавливаем обложку в режиме редактирования
         var imgEl = document.getElementById('folder-image-' + folderId);
         if (imgEl) {
             if (folder.cover_url) {
-                var thumbUrl = folder.cover_url.startsWith('http')
-                    ? folder.cover_url
-                    : 'https://drive.google.com/thumbnail?id=' + folder.cover_url + '&sz=w800';
-                imgEl.style.backgroundImage = 'url(\'' + thumbUrl + '\')';
+                var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
+                imgEl.style.backgroundImage = 'url(\'' + url + '\')';
+                imgEl.dataset.fileId = folder.cover_url;
             } else {
                 api.getPhotosList(folderId).then(function(photos) {
                     if (photos.length > 0) {
-                        var url = 'https://drive.google.com/thumbnail?id=' + photos[0].file_id + '&sz=w800';
+                        var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + photos[0].file_id + '&size=thumb';
                         imgEl.style.backgroundImage = 'url(\'' + url + '\')';
+                        imgEl.dataset.fileId = photos[0].file_id;
                     }
                 });
             }
@@ -207,9 +195,7 @@ var gallery = {
     },
 
     updatePreviewStyle: function(imgEl) {
-        if (!imgEl) {
-            imgEl = document.getElementById('folder-image-' + this.editingFolder);
-        }
+        if (!imgEl) imgEl = document.getElementById('folder-image-' + this.editingFolder);
         if (!imgEl) return;
         imgEl.style.backgroundPosition = this.previewState.x + '% ' + this.previewState.y + '%';
         imgEl.style.backgroundSize = this.previewState.scale + '%';
@@ -226,15 +212,16 @@ var gallery = {
         this.updatePreviewStyle();
     },
 
+    // FIX #4: сохраняем file_id, убираем alert
     savePreview: function() {
         var self = this;
         if (!self.editingFolder) return;
 
         var imgEl = document.getElementById('folder-image-' + self.editingFolder);
-        var coverUrl = imgEl ? (imgEl.dataset.coverUrl || null) : null;
+        var fileId = imgEl ? (imgEl.dataset.fileId || null) : null;
 
         api.updateFolder(self.editingFolder, {
-            cover_url: coverUrl,
+            cover_url: fileId,
             cover_x: self.previewState.x,
             cover_y: self.previewState.y,
             cover_scale: self.previewState.scale
@@ -246,6 +233,8 @@ var gallery = {
 
     // === ОТКРЫТИЕ ПАПКИ ===
     openFolder: function(folder, pushState) {
+        this._lastFolderId = folder.id; // FIX #1: запоминаем для возврата
+
         this.currentFolder = folder;
         this.currentPhotos = [];
         this.visiblePhotos = [];
@@ -256,21 +245,27 @@ var gallery = {
 
         document.getElementById('folder-title-text').textContent = folder.title;
 
-        // Обложка полосы вверху страницы папки
+        // FIX #2: полоса обложки вверху страницы папки
         var coverEl = document.getElementById('folder-cover-image');
         if (coverEl) {
             if (folder.cover_url) {
-                var url = folder.cover_url.startsWith('http')
-                    ? folder.cover_url
-                    : 'https://drive.google.com/thumbnail?id=' + folder.cover_url + '&sz=w800';
+                var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
                 coverEl.style.backgroundImage = 'url(\'' + url + '\')';
+                coverEl.style.backgroundSize = 'cover';
+                coverEl.style.backgroundPosition = 'center';
             } else {
-                coverEl.style.backgroundImage = 'none';
-                coverEl.style.backgroundColor = '#eee';
+                var self = this;
+                api.getPhotosList(folder.id).then(function(photos) {
+                    if (photos.length > 0) {
+                        var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + photos[0].file_id + '&size=thumb';
+                        coverEl.style.backgroundImage = 'url(\'' + url + '\')';
+                        coverEl.style.backgroundSize = 'cover';
+                        coverEl.style.backgroundPosition = 'center';
+                    }
+                });
             }
         }
 
-        // Кнопки для администратора в боковой панели
         var sidebarBtns = document.getElementById('sidebar-admin-buttons');
         if (sidebarBtns) {
             sidebarBtns.style.display = api.isAdmin() ? 'flex' : 'none';
@@ -307,16 +302,12 @@ var gallery = {
                 return;
             }
 
-            // Сначала показываем миниатюры (маленькие, загружаются быстро)
             api.getPhotosThumbnails(folderId, batch).then(function(thumbUrls) {
-                // Добавляем URL в объекты фото
                 for (var i = 0; i < batch.length; i++) {
                     batch[i].thumbUrl = thumbUrls[batch[i].id] || '';
-                    // Оригинальный URL сформируем при открытии просмотра
                     batch[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + batch[i].file_id + '&size=original';
                 }
 
-                // Если это первая загрузка — очищаем контейнер
                 if (offset === 0 && container) {
                     container.innerHTML = '';
                 } else {
@@ -368,8 +359,7 @@ var gallery = {
             var item = self.createPhotoItem(self.visiblePhotos[i], i);
             var div = document.createElement('div');
             div.innerHTML = item;
-            var node = div.firstChild;
-            grid.appendChild(node);
+            grid.appendChild(div.firstChild);
         }
     },
 
@@ -379,17 +369,16 @@ var gallery = {
 
         var adminActions = '';
         if (isAdmin) {
+            // FIX #5: храним актуальное состояние hidden в data-атрибуте элемента
             adminActions =
                 '<div class="photo-item__admin-actions" onclick="event.stopPropagation()">' +
-                '<button onclick="event.stopPropagation(); admin.togglePhotoHidden(\'' + photo.id + '\', ' + !photo.hidden + ')" title="' + (photo.hidden ? 'Показать' : 'Скрыть') + '">' + (photo.hidden ? '👁' : '🙈') + '</button>' +
+                '<button onclick="event.stopPropagation(); admin.togglePhotoHidden(\'' + photo.id + '\')" title="' + (photo.hidden ? 'Показать' : 'Скрыть') + '">' + (photo.hidden ? '👁' : '🙈') + '</button>' +
                 '<button onclick="event.stopPropagation(); admin.deletePhoto(\'' + photo.id + '\')" title="Удалить">🗑️</button>' +
                 '</div>';
         }
 
-        var imgSrc = photo.thumbUrl || '';
-
-        return '<div class="photo-item ' + hiddenClass + '" data-id="' + photo.id + '" data-index="' + index + '" onclick="gallery.handlePhotoClick(event, ' + index + ', \'' + photo.id + '\')">' +
-            '<img src="' + imgSrc + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">' +
+        return '<div class="photo-item ' + hiddenClass + '" data-id="' + photo.id + '" data-hidden="' + (photo.hidden ? '1' : '0') + '" data-index="' + index + '" onclick="gallery.handlePhotoClick(event, ' + index + ', \'' + photo.id + '\')">' +
+            '<img src="' + (photo.thumbUrl || '') + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">' +
             adminActions +
         '</div>';
     },
@@ -404,7 +393,7 @@ var gallery = {
         this.openFullscreen(index);
     },
 
-    // === ПОЛНОЭКРАННЫЙ ПРОСМОТР ===
+    // FIX #3: фото максимально большое во весь экран
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
 
@@ -420,9 +409,15 @@ var gallery = {
         if (btnCover) btnCover.style.display = api.isAdmin() ? 'inline-block' : 'none';
         if (btnDelete) btnDelete.style.display = api.isAdmin() ? 'inline-block' : 'none';
 
-        // Для просмотра используем миниатюру (загружается быстро)
-        // Для скачивания — оригинал
-        if (img) img.src = photo.thumbUrl || '';
+        if (img) {
+            img.src = photo.thumbUrl || '';
+            // Максимальный размер — на весь экран
+            img.style.maxWidth = '100vw';
+            img.style.maxHeight = '100vh';
+            img.style.width = 'auto';
+            img.style.height = 'auto';
+            img.style.objectFit = 'contain';
+        }
         if (link) {
             link.href = photo.originalUrl || '#';
             link.download = photo.name || 'photo.jpg';
@@ -472,17 +467,26 @@ var gallery = {
         if (this.currentPhotoIndex < this.visiblePhotos.length - 1) this.openFullscreen(this.currentPhotoIndex + 1);
     },
 
-    // === ВОЗВРАТ НА ГЛАВНУЮ ===
+    // FIX #1: возвращаемся к нужной папке
     showMainPage: function() {
         if (typeof admin !== 'undefined' && admin.isSelectionMode) {
             admin.exitSelectionMode();
         }
+
+        var lastFolderId = this._lastFolderId;
+
         document.getElementById('folder-page').style.display = 'none';
         document.getElementById('main-page').style.display = 'block';
         document.getElementById('rec-cover').style.display = 'block';
         this.currentFolder = null;
         window.location.hash = '';
-        window.scrollTo(0, 0);
+
+        if (lastFolderId) {
+            setTimeout(function() {
+                var card = document.getElementById('folder-' + lastFolderId);
+                if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
     }
 };
 

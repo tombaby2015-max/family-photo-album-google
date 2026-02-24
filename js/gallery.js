@@ -245,26 +245,13 @@ var gallery = {
 
         document.getElementById('folder-title-text').textContent = folder.title;
 
-        // FIX #2: полоса обложки вверху страницы папки
-        var coverEl = document.getElementById('folder-cover-image');
-        if (coverEl) {
-            if (folder.cover_url) {
-                var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
-                coverEl.style.backgroundImage = 'url(\'' + url + '\')';
-                coverEl.style.backgroundSize = 'cover';
-                coverEl.style.backgroundPosition = 'center';
-            } else {
-                var self = this;
-                api.getPhotosList(folder.id).then(function(photos) {
-                    if (photos.length > 0) {
-                        var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + photos[0].file_id + '&size=thumb';
-                        coverEl.style.backgroundImage = 'url(\'' + url + '\')';
-                        coverEl.style.backgroundSize = 'cover';
-                        coverEl.style.backgroundPosition = 'center';
-                    }
-                });
-            }
-        }
+        // Полоска вверху — всегда главное фото сайта, не обложка папки
+var coverEl = document.getElementById('folder-cover-image');
+if (coverEl) {
+    coverEl.style.backgroundImage = 'url(\'https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg\')';
+    coverEl.style.backgroundSize = 'cover';
+    coverEl.style.backgroundPosition = 'center';
+}
 
         var sidebarBtns = document.getElementById('sidebar-admin-buttons');
         if (sidebarBtns) {

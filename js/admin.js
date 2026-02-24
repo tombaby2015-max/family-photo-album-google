@@ -2,7 +2,7 @@
 
 var admin = {
     inactivityTimer: null,
-    inactivityTimeout: 15 * 60 * 1000, // 15 минут
+    inactivityTimeout: 15 * 60 * 1000,
     isAdminActive: false,
     isSelectionMode: false,
     selectedPhotos: [],
@@ -68,7 +68,7 @@ var admin = {
         this.isAdminActive = false;
     },
 
-    // === ТАЙМЕР БЕЗДЕЙСТВИЯ (автовыход) ===
+    // === ТАЙМЕР БЕЗДЕЙСТВИЯ ===
     startInactivityTimer: function() {
         this.stopInactivityTimer();
         var self = this;
@@ -92,32 +92,22 @@ var admin = {
     },
 
     // === СИНХРОНИЗАЦИЯ С GOOGLE DRIVE ===
-    // Читает папки и фото из вашего Google Drive и добавляет новые в хранилище
-    syncWithDrive: function() {
+    syncWithDrive: function(btn) {
         if (!confirm('Синхронизировать с Google Drive?\n\nНовые папки и фото будут добавлены в альбом.')) return;
 
         var self = this;
-        var btn = event.target;
-        btn.textContent = '⏳ Синхронизация...';
-        btn.disabled = true;
+        if (btn) { btn.textContent = '⏳ Синхронизация...'; btn.disabled = true; }
 
         api.sync().then(function(result) {
-            btn.textContent = '🔄 Синхронизировать';
-            btn.disabled = false;
-
+            if (btn) { btn.textContent = '🔄 Синхронизировать'; btn.disabled = false; }
             if (result.success) {
-                alert(
-                    '✅ Синхронизация завершена!\n' +
-                    'Новых папок: ' + result.syncedFolders + '\n' +
-                    'Новых фото: ' + result.syncedPhotos
-                );
+                alert('✅ Готово!\nНовых папок: ' + result.syncedFolders + '\nНовых фото: ' + result.syncedPhotos);
                 gallery.loadFolders();
             } else {
                 alert('❌ Ошибка: ' + (result.error || 'Неизвестная ошибка'));
             }
-        }).catch(function(e) {
-            btn.textContent = '🔄 Синхронизировать';
-            btn.disabled = false;
+        }).catch(function() {
+            if (btn) { btn.textContent = '🔄 Синхронизировать'; btn.disabled = false; }
             alert('❌ Ошибка соединения');
         });
     },
@@ -182,27 +172,23 @@ var admin = {
     },
 
     // === ОБЛОЖКА ПАПКИ ===
-    // Устанавливает текущее фото как обложку папки
     setFolderCover: function() {
         if (!gallery.currentFolder) return;
         var photo = gallery.visiblePhotos[gallery.currentPhotoIndex];
         if (!photo) return;
 
         var folderId = gallery.currentFolder.id;
-
-        api.updateFolder(folderId, {
-            cover_url: photo.file_id  // сохраняем Google Drive ID фото
-        }).then(function(result) {
+        api.updateFolder(folderId, { cover_url: photo.file_id }).then(function(result) {
             if (result) {
                 gallery.closeFullscreen();
-                // Обновляем данные папки
                 for (var i = 0; i < gallery.folders.length; i++) {
                     if (gallery.folders[i].id === folderId) {
                         gallery.folders[i].cover_url = photo.file_id;
                         break;
                     }
                 }
-                alert('✅ Обложка установлена!');
+                // Без alert — просто тихо обновляем
+                gallery.loadFolders();
             } else {
                 alert('Ошибка установки обложки');
             }
@@ -210,26 +196,41 @@ var admin = {
     },
 
     // === УПРАВЛЕНИЕ ФОТО ===
-    togglePhotoHidden: function(photoId, hide) {
+
+    // FIX #5: читаем актуальное состояние из DOM, не передаём параметром
+    togglePhotoHidden: function(photoId) {
         if (!gallery.currentFolder) return;
         var folderId = gallery.currentFolder.id;
 
-        api.updatePhoto(folderId, photoId, { hidden: hide }).then(function(result) {
+        // Берём текущее состояние из data-атрибута элемента
+        var photoEl = document.querySelector('[data-id="' + photoId + '"]');
+        if (!photoEl) return;
+
+        var currentlyHidden = photoEl.getAttribute('data-hidden') === '1';
+        var newHidden = !currentlyHidden;
+
+        api.updatePhoto(folderId, photoId, { hidden: newHidden }).then(function(result) {
             if (result && result.success) {
-                // Обновляем в памяти
+                // Обновляем data-атрибут
+                photoEl.setAttribute('data-hidden', newHidden ? '1' : '0');
+
+                // Обновляем внешний вид
+                if (newHidden) photoEl.classList.add('hidden-photo');
+                else photoEl.classList.remove('hidden-photo');
+
+                // Обновляем кнопку
+                var btn = photoEl.querySelector('.photo-item__admin-actions button');
+                if (btn) {
+                    btn.title = newHidden ? 'Показать' : 'Скрыть';
+                    btn.textContent = newHidden ? '👁' : '🙈';
+                }
+
+                // Обновляем в массиве
                 for (var i = 0; i < gallery.visiblePhotos.length; i++) {
                     if (gallery.visiblePhotos[i].id === photoId) {
-                        gallery.visiblePhotos[i].hidden = hide;
+                        gallery.visiblePhotos[i].hidden = newHidden;
                         break;
                     }
-                }
-                // Обновляем вид фото
-                var photoEl = document.querySelector('[data-id="' + photoId + '"]');
-                if (photoEl) {
-                    if (hide) photoEl.classList.add('hidden-photo');
-                    else photoEl.classList.remove('hidden-photo');
-                    var btn = photoEl.querySelector('button');
-                    if (btn) btn.textContent = hide ? '👁' : '🙈';
                 }
             } else {
                 alert('Ошибка');
@@ -246,7 +247,6 @@ var admin = {
             if (result && result.success) {
                 var photoEl = document.querySelector('[data-id="' + photoId + '"]');
                 if (photoEl) photoEl.remove();
-                // Убираем из массива
                 gallery.visiblePhotos = gallery.visiblePhotos.filter(function(p) { return p.id !== photoId; });
             } else {
                 alert('Ошибка удаления');
@@ -261,7 +261,6 @@ var admin = {
 
         var folderId = gallery.currentFolder.id;
         var photoId = photo.id;
-        var self = this;
 
         api.deletePhoto(folderId, photoId).then(function(result) {
             if (result && result.success) {
@@ -283,35 +282,49 @@ var admin = {
         document.getElementById('btn-enter-selection').style.display = 'none';
         document.getElementById('selection-toolbar').style.display = 'flex';
 
-        // Добавляем чекбоксы к каждому фото
-        var photos = document.querySelectorAll('.photo-item');
-        photos.forEach(function(photoEl) {
+        // FIX #6: сбрасываем кнопку при входе
+        var btnAll = document.getElementById('btn-select-all');
+        if (btnAll) btnAll.textContent = 'Выбрать все';
+
+        document.querySelectorAll('.photo-item').forEach(function(photoEl) {
             var cb = document.createElement('div');
             cb.className = 'photo-checkbox-custom';
             cb.innerHTML = '';
             photoEl.appendChild(cb);
         });
+
+        this.updateSelectionButtons();
     },
 
+    // FIX #6: полный сброс состояния при выходе
     exitSelectionMode: function() {
         this.isSelectionMode = false;
         this.selectedPhotos = [];
 
-        document.getElementById('btn-enter-selection').style.display = 'block';
-        document.getElementById('selection-toolbar').style.display = 'none';
+        var btnEnter = document.getElementById('btn-enter-selection');
+        var toolbar = document.getElementById('selection-toolbar');
+        if (btnEnter) btnEnter.style.display = 'block';
+        if (toolbar) toolbar.style.display = 'none';
+
+        // Сбрасываем текст кнопки
+        var btnAll = document.getElementById('btn-select-all');
+        if (btnAll) btnAll.textContent = 'Выбрать все';
 
         document.querySelectorAll('.photo-checkbox-custom').forEach(function(cb) { cb.remove(); });
         this.updateSelectionButtons();
     },
 
+    // FIX #6: корректная логика Выбрать все / Снять выбор
     toggleSelectAll: function() {
         var self = this;
         var photos = document.querySelectorAll('.photo-item');
-        var allSelected = this.selectedPhotos.length === photos.length;
+        var allSelected = this.selectedPhotos.length === photos.length && photos.length > 0;
 
         self.selectedPhotos = [];
+
         photos.forEach(function(photoEl) {
             var cb = photoEl.querySelector('.photo-checkbox-custom');
+            if (!cb) return;
             if (!allSelected) {
                 cb.classList.add('checked');
                 cb.innerHTML = '✓';
@@ -339,38 +352,47 @@ var admin = {
             cbEl.classList.remove('checked');
             cbEl.innerHTML = '';
         }
+
+        // Обновляем текст кнопки "Выбрать все"
+        var photos = document.querySelectorAll('.photo-item');
+        var btn = document.getElementById('btn-select-all');
+        if (btn) {
+            btn.textContent = (this.selectedPhotos.length === photos.length && photos.length > 0)
+                ? 'Снять выбор'
+                : 'Выбрать все';
+        }
+
         this.updateSelectionButtons();
     },
 
     updateSelectionButtons: function() {
         var count = this.selectedPhotos.length;
-        var hasSelected = count > 0;
+        var has = count > 0;
 
         var btnDelete = document.getElementById('btn-delete-selected');
         var btnHide = document.getElementById('btn-hide-selected');
 
         if (btnDelete) {
             btnDelete.textContent = 'Удалить выбранные (' + count + ')';
-            btnDelete.disabled = !hasSelected;
-            btnDelete.style.opacity = hasSelected ? '1' : '0.5';
+            btnDelete.disabled = !has;
+            btnDelete.style.opacity = has ? '1' : '0.5';
         }
         if (btnHide) {
             btnHide.textContent = 'Скрыть выбранные (' + count + ')';
-            btnHide.disabled = !hasSelected;
-            btnHide.style.opacity = hasSelected ? '1' : '0.5';
+            btnHide.disabled = !has;
+            btnHide.style.opacity = has ? '1' : '0.5';
         }
     },
 
     deleteSelectedPhotos: function() {
-        if (this.selectedPhotos.length === 0) return;
-        if (!gallery.currentFolder) return;
+        if (this.selectedPhotos.length === 0 || !gallery.currentFolder) return;
         if (!confirm('Удалить ' + this.selectedPhotos.length + ' фото?')) return;
 
         var self = this;
         var folderId = gallery.currentFolder.id;
         var toDelete = this.selectedPhotos.slice();
-
         var done = 0;
+
         toDelete.forEach(function(photoId) {
             api.deletePhoto(folderId, photoId).then(function() {
                 var el = document.querySelector('[data-id="' + photoId + '"]');
@@ -386,18 +408,18 @@ var admin = {
     },
 
     hideSelectedPhotos: function(hide) {
-        if (this.selectedPhotos.length === 0) return;
-        if (!gallery.currentFolder) return;
+        if (this.selectedPhotos.length === 0 || !gallery.currentFolder) return;
 
         var self = this;
         var folderId = gallery.currentFolder.id;
         var toHide = this.selectedPhotos.slice();
-
         var done = 0;
+
         toHide.forEach(function(photoId) {
             api.updatePhoto(folderId, photoId, { hidden: hide }).then(function() {
                 var el = document.querySelector('[data-id="' + photoId + '"]');
                 if (el) {
+                    el.setAttribute('data-hidden', hide ? '1' : '0');
                     if (hide) el.classList.add('hidden-photo');
                     else el.classList.remove('hidden-photo');
                 }
@@ -408,22 +430,41 @@ var admin = {
                     }
                 }
                 done++;
-                if (done === toHide.length) {
-                    self.exitSelectionMode();
-                }
+                if (done === toHide.length) self.exitSelectionMode();
             });
         });
     },
 
-    // === БЭКАП ===
+    // === БЭКАП #8: скачиваем файл И сохраняем в Google Drive ===
     manualBackup: function() {
+        var self = this;
         api.createBackup().then(function(result) {
             if (result.success) {
-                // Файл уже скачался автоматически (через api.js)
-                alert('✅ Бэкап скачан на ваш компьютер!');
+                // Файл уже скачался автоматически через api.js
+                // Дополнительно сохраняем в Google Drive
+                self.saveBackupToDrive(result.backup);
             } else {
                 alert('❌ Ошибка бэкапа');
             }
+        });
+    },
+
+    saveBackupToDrive: function(backupData) {
+        if (!backupData) return;
+        // Отправляем бэкап на сервер чтобы он сохранил в Drive
+        fetch('https://photo-backend.belovolov-email.workers.dev/admin/backup-to-drive', {
+            method: 'POST',
+            headers: api.getHeaders(true),
+            body: JSON.stringify(backupData)
+        }).then(function(r) { return r.json(); })
+          .then(function(result) {
+            if (result.success) {
+                alert('✅ Бэкап скачан и сохранён в Google Drive!');
+            } else {
+                alert('✅ Бэкап скачан на компьютер.\n⚠️ В Google Drive не сохранился: ' + (result.error || ''));
+            }
+        }).catch(function() {
+            alert('✅ Бэкап скачан на компьютер.\n⚠️ В Google Drive не сохранился (ошибка соединения)');
         });
     },
 
@@ -486,7 +527,7 @@ var admin = {
         document.body.appendChild(modal);
         modal.style.display = 'block';
 
-        fetch(API_BASE + '/admin/storage-info', {
+        fetch('https://photo-backend.belovolov-email.workers.dev/admin/storage-info', {
             headers: { 'Authorization': 'Bearer ' + token }
         }).then(function(r) { return r.json(); })
           .then(function(resp) {
@@ -500,8 +541,7 @@ var admin = {
             var deleted = photos.filter(function(p) { return p.deleted; }).length;
 
             var html = '<h3>📊 Статистика</h3>';
-            html += '<p><strong>Папок:</strong> ' + folders.length + '</p>';
-            html += '<p><strong>Фото активных:</strong> ' + active + ' | удалённых: ' + deleted + '</p>';
+            html += '<p><strong>Папок:</strong> ' + folders.length + ' | <strong>Фото активных:</strong> ' + active + ' | удалённых: ' + deleted + '</p>';
             html += '<h3 style="margin-top:20px;">📁 Папки</h3>';
             html += '<table style="width:100%;border-collapse:collapse;">';
             html += '<tr style="background:#f0f0f0;"><th style="padding:8px;border:1px solid #ddd;">Название</th><th style="padding:8px;border:1px solid #ddd;">Скрыта</th></tr>';

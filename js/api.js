@@ -180,5 +180,67 @@ a.download = 'Бэкап сайта Фотоальбом ' + date + ' ' + time +
             headers: this.getHeaders(true)
         }).then(function(r) { return r.json(); })
           .catch(function() { return { success: false, error: 'Ошибка соединения' }; });
+    },
+
+    // === СЕКЦИИ ===
+    getSections: function(folderId) {
+        return fetch(API_BASE + '/sections?folder_id=' + folderId, {
+            headers: this.getHeaders(this.isAdmin())
+        }).then(function(r) { return r.json(); })
+          .then(function(data) { return data.sections || []; })
+          .catch(function() { return []; });
+    },
+
+    createSection: function(folderId, title) {
+        return fetch(API_BASE + '/sections', {
+            method: 'POST',
+            headers: this.getHeaders(true),
+            body: JSON.stringify({ folder_id: folderId, title: title })
+        }).then(function(r) { return r.json(); })
+          .catch(function() { return null; });
+    },
+
+    updateSection: function(folderId, sectionId, title) {
+        return fetch(API_BASE + '/sections', {
+            method: 'PATCH',
+            headers: this.getHeaders(true),
+            body: JSON.stringify({ folder_id: folderId, id: sectionId, title: title })
+        }).then(function(r) { return r.json(); })
+          .catch(function() { return null; });
+    },
+
+    deleteSection: function(folderId, sectionId) {
+        return fetch(API_BASE + '/sections?folder_id=' + folderId + '&id=' + sectionId, {
+            method: 'DELETE',
+            headers: this.getHeaders(true)
+        }).then(function(r) { return r.json(); })
+          .catch(function() { return null; });
+    },
+
+    reorderSections: function(folderId, orders) {
+        return fetch(API_BASE + '/sections/reorder', {
+            method: 'POST',
+            headers: this.getHeaders(true),
+            body: JSON.stringify({ folder_id: folderId, orders: orders })
+        }).then(function(r) { return r.json(); })
+          .catch(function() { return null; });
+    },
+
+    setPhotoSection: function(folderId, photoId, sectionId) {
+        return fetch(API_BASE + '/photos/section', {
+            method: 'PATCH',
+            headers: this.getHeaders(true),
+            body: JSON.stringify({ folder_id: folderId, photo_id: photoId, section_id: sectionId || null })
+        }).then(function(r) { return r.json(); })
+          .catch(function() { return null; });
+    },
+
+    reorderPhotos: function(folderId, orders) {
+        return fetch(API_BASE + '/photos/reorder', {
+            method: 'POST',
+            headers: this.getHeaders(true),
+            body: JSON.stringify({ folder_id: folderId, orders: orders })
+        }).then(function(r) { return r.json(); })
+          .catch(function() { return null; });
     }
 };

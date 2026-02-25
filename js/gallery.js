@@ -373,35 +373,50 @@ var gallery = {
         this.openFullscreen(index);
     },
 
-    // FIX #3: фото максимально большое во весь экран
+    // === FULLSCREEN ПРОСМОТР ===
+    _animating: false,
+
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
 
         this.currentPhotoIndex = index;
         var photo = this.visiblePhotos[index];
-
-        var img = document.getElementById('fullscreen-image');
-        var link = document.getElementById('download-link');
         var viewer = document.getElementById('fullscreen-viewer');
+        var container = document.querySelector('.fullscreen-viewer__image-container');
 
+        // Инициализируем два img-элемента если ещё нет
+        if (container && !container.querySelector('#fv-img-a')) {
+            container.innerHTML =
+                '<img id="fv-img-a" class="fv-img-current" src="" alt="">' +
+                '<img id="fv-img-b" src="" alt="" style="opacity:0;">';
+        }
+
+        var imgA = document.getElementById('fv-img-a');
+        if (imgA) {
+            imgA.src = photo.thumbUrl || '';
+            imgA.className = 'fv-img-current';
+        }
+        var imgB = document.getElementById('fv-img-b');
+        if (imgB) { imgB.src = ''; imgB.className = ''; imgB.style.opacity = '0'; }
+
+        var link = document.getElementById('download-link');
+        if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
+
+        // Admin кнопки через класс
         var btnCover = document.getElementById('btn-set-cover');
         var btnDelete = document.getElementById('btn-delete-photo');
-        if (btnCover) btnCover.style.display = api.isAdmin() ? 'inline-block' : 'none';
-        if (btnDelete) btnDelete.style.display = api.isAdmin() ? 'inline-block' : 'none';
+        if (api.isAdmin()) {
+            if (btnCover) btnCover.classList.remove('fv-action-btn--admin-only');
+            if (btnDelete) btnDelete.classList.remove('fv-action-btn--admin-only');
+        } else {
+            if (btnCover) btnCover.classList.add('fv-action-btn--admin-only');
+            if (btnDelete) btnDelete.classList.add('fv-action-btn--admin-only');
+        }
 
-        if (img) {
-            img.src = photo.thumbUrl || '';
-        }
-        if (link) {
-            link.href = photo.originalUrl || '#';
-            link.download = photo.name || 'photo.jpg';
-        }
         if (viewer) viewer.style.display = 'flex';
+        this._animating = false;
 
-        // Сброс зума при открытии нового фото
-        this._resetZoom();
-
-        // Инициализируем иконки Lucide
+        // Инициализируем иконки Lucide после показа viewer
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
         var self = this;
@@ -415,132 +430,83 @@ var gallery = {
         this.initSwipe();
     },
 
+    // Плавная смена фото: текущее уезжает, новое въезжает одновременно
+    _changePhoto: function(newIndex, direction) {
+        if (this._animating) return;
+        if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
+
+        var self = this;
+        var photo = this.visiblePhotos[newIndex];
+
+        var imgA = document.getElementById('fv-img-a'); // текущее (видимое)
+        var imgB = document.getElementById('fv-img-b'); // следующее (скрытое)
+        if (!imgA || !imgB) { self.openFullscreen(newIndex); return; }
+
+        this._animating = true;
+        this.currentPhotoIndex = newIndex;
+
+        // Загружаем новое фото в скрытый слой
+        imgB.src = photo.thumbUrl || '';
+        // Ставим начальную позицию для въезда (без transition)
+        imgB.className = direction === 'left' ? 'fv-img-in-left' : 'fv-img-in-right';
+
+        // Обновляем ссылку скачивания
+        var link = document.getElementById('download-link');
+        if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
+
+        // Запускаем анимацию в следующем кадре
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                // Текущее уезжает
+                imgA.className = direction === 'left' ? 'fv-img-out-left' : 'fv-img-out-right';
+                // Новое въезжает
+                imgB.className = 'fv-img-current';
+
+                setTimeout(function() {
+                    // Меняем местами: B становится новым текущим A
+                    imgA.src = imgB.src;
+                    imgA.className = 'fv-img-current';
+                    imgB.className = '';
+                    imgB.style.opacity = '0';
+                    imgB.src = '';
+                    self._animating = false;
+                }, 350);
+            });
+        });
+    },
+
     initSwipe: function() {
         var self = this;
-        var imageContainer = document.querySelector('.fullscreen-viewer__image-container');
-        if (!imageContainer) return;
-        var startX = 0;
-        var startY = 0;
-        var isDragging = false;
+        var container = document.querySelector('.fullscreen-viewer__image-container');
+        if (!container) return;
 
-        imageContainer.ontouchstart = function(e) {
+        var startX = 0, startY = 0;
+
+        container.ontouchstart = function(e) {
             startX = e.changedTouches[0].screenX;
             startY = e.changedTouches[0].screenY;
-            isDragging = true;
         };
 
-        imageContainer.ontouchmove = function(e) {
-            if (!isDragging) return;
-            var dx = e.changedTouches[0].screenX - startX;
-            var dy = e.changedTouches[0].screenY - startY;
-            // Если горизонтальное движение — блокируем скролл страницы
-            if (Math.abs(dx) > Math.abs(dy)) e.preventDefault();
+        container.ontouchmove = function(e) {
+            var dx = Math.abs(e.changedTouches[0].screenX - startX);
+            var dy = Math.abs(e.changedTouches[0].screenY - startY);
+            if (dx > dy) e.preventDefault();
         };
 
-        imageContainer.ontouchend = function(e) {
-            if (!isDragging) return;
-            isDragging = false;
+        container.ontouchend = function(e) {
             var dx = e.changedTouches[0].screenX - startX;
             var dy = e.changedTouches[0].screenY - startY;
             if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
-                if (dx < 0) self.nextPhotoAnimated('left');
-                else self.prevPhotoAnimated('right');
+                if (dx < 0) self._changePhoto(self.currentPhotoIndex + 1, 'left');
+                else self._changePhoto(self.currentPhotoIndex - 1, 'right');
             }
         };
     },
 
-    // Плавная смена фото с анимацией слайда
-    _changePhotoAnimated: function(newIndex, direction) {
-        var self = this;
-        if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
-
-        var img = document.getElementById('fullscreen-image');
-        if (!img) { self.openFullscreen(newIndex); return; }
-
-        // direction: 'left' = листаем вперёд, 'right' = назад
-        var outClass = direction === 'left' ? 'fv-slide-out-left' : 'fv-slide-out-right';
-        var inClass  = direction === 'left' ? 'fv-slide-in-left'  : 'fv-slide-in-right';
-
-        // Шаг 1: уезжаем
-        img.classList.add(outClass);
-
-        setTimeout(function() {
-            // Шаг 2: меняем фото и ставим начальную позицию
-            self.currentPhotoIndex = newIndex;
-            var photo = self.visiblePhotos[newIndex];
-            img.src = photo.thumbUrl || '';
-
-            var link = document.getElementById('download-link');
-            if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
-
-            img.classList.remove(outClass);
-            img.classList.add(inClass);
-
-            // Шаг 3: запускаем анимацию въезда (небольшая пауза чтобы браузер применил inClass)
-            requestAnimationFrame(function() {
-                requestAnimationFrame(function() {
-                    img.classList.remove(inClass);
-                });
-            });
-        }, 250);
-    },
-
-    prevPhotoAnimated: function(dir) {
-        if (this.currentPhotoIndex > 0)
-            this._changePhotoAnimated(this.currentPhotoIndex - 1, dir || 'right');
-    },
-
-    nextPhotoAnimated: function(dir) {
-        if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
-            this._changePhotoAnimated(this.currentPhotoIndex + 1, dir || 'left');
-    },
-
-    // === ЗУМ ФОТО ===
-    _zoomLevel: 1,
-    _zoomMax: 3,
-
-    zoomIn: function() {
-        if (this._zoomLevel >= this._zoomMax) return;
-        this._zoomLevel = Math.min(this._zoomMax, this._zoomLevel + 0.5);
-        this._applyZoom();
-    },
-
-    zoomOut: function() {
-        if (this._zoomLevel <= 1) return;
-        this._zoomLevel = Math.max(1, this._zoomLevel - 0.5);
-        this._applyZoom();
-    },
-
-    _applyZoom: function() {
-        var img = document.getElementById('fullscreen-image');
-        if (!img) return;
-        img.style.transform = 'scale(' + this._zoomLevel + ')';
-        img.style.transformOrigin = 'center center';
-        img.style.cursor = this._zoomLevel > 1 ? 'zoom-out' : 'default';
-        // Обновляем состояние кнопок
-        var btnIn = document.getElementById('btn-zoom-in');
-        var btnOut = document.getElementById('btn-zoom-out');
-        if (btnIn) btnIn.style.opacity = this._zoomLevel >= this._zoomMax ? '0.35' : '1';
-        if (btnOut) btnOut.style.opacity = this._zoomLevel <= 1 ? '0.35' : '1';
-    },
-
-    _resetZoom: function() {
-        this._zoomLevel = 1;
-        var img = document.getElementById('fullscreen-image');
-        if (img) {
-            img.style.transform = '';
-            img.style.cursor = 'default';
-        }
-        var btnIn = document.getElementById('btn-zoom-in');
-        var btnOut = document.getElementById('btn-zoom-out');
-        if (btnIn) btnIn.style.opacity = '1';
-        if (btnOut) btnOut.style.opacity = '0.35';
-    },
-
     closeFullscreen: function() {
-        this._resetZoom();
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'none';
+        this._animating = false;
         if (this.keyHandler) {
             document.removeEventListener('keydown', this.keyHandler);
             this.keyHandler = null;

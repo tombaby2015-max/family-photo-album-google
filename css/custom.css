@@ -1,899 +1,554 @@
-/* Модальное окно входа */
-.admin-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 10000;
-    display: none;
-    align-items: center;
-    justify-content: center;
-}
-.admin-modal__overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.7);
-}
-.admin-modal__content {
-    position: relative;
-    background: #fff;
-    padding: 40px;
-    border-radius: 8px;
-    width: 90%;
-    max-width: 400px;
-    text-align: center;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-}
-.admin-modal__content h3 {
-    margin: 0 0 20px 0;
-    font-size: 24px;
-    font-weight: 600;
-}
-.admin-modal__content input {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 16px;
-    margin-bottom: 20px;
-    box-sizing: border-box;
-}
-.admin-modal__content button {
-    background: #000;
-    color: #fff;
-    border: none;
-    padding: 12px 40px;
-    border-radius: 4px;
-    font-size: 16px;
-    cursor: pointer;
-}
-.admin-error {
-    color: #e74c3c;
-    margin-top: 15px;
-    font-size: 14px;
-    min-height: 20px;
+/* ========== ОБЩИЕ СТИЛИ ========== */
+body, html {
+    margin: 0;
+    padding: 0;
+    font-family: 'TildaSans', Arial, sans-serif;
 }
 
-/* Админ-панель */
-.admin-panel {
-    background: #f5f5f5;
-    padding: 20px 0;
-    margin-bottom: 20px;
-    border-bottom: 2px solid #ddd;
-}
-.admin-panel__title {
+.loading {
     text-align: center;
+    padding: 40px;
+    color: #999;
+    font-size: 16px;
+}
+
+/* ========== ОБЛОЖКА ========== */
+.t-cover__arrow {
+    cursor: pointer;
+}
+
+/* ========== АДМИН ПАНЕЛЬ ========== */
+.admin-panel {
+    background: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 20px 0;
+    margin-bottom: 30px;
+}
+
+.admin-panel__title {
     font-size: 18px;
     font-weight: 600;
-    color: #333;
     margin-bottom: 15px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
+    color: #333;
 }
+
 .admin-panel__buttons {
     display: flex;
-    justify-content: center;
-    gap: 10px;
     flex-wrap: wrap;
-    max-width: 900px;
-    margin: 0 auto;
-}
-.admin-panel__buttons .admin-btn {
-    width: 200px;
-    min-width: 200px;
-    max-width: 200px;
-    margin-bottom: 0;
-    font-size: 13px;
-    padding: 10px 15px;
-    box-sizing: border-box;
-    text-align: center;
-    justify-content: center;
-    border-radius: 50px;
-    transition: all 0.28s cubic-bezier(.4,0,.2,1);
-    cursor: pointer;
-}
-.admin-panel__buttons .admin-btn:hover {
-    background: #555;
-    color: #fff;
-    border-color: #555;
-    transform: translateY(-2px);
+    gap: 10px;
 }
 
-/* Кнопки админа */
 .admin-btn {
+    padding: 10px 20px;
     background: #fff;
-    color: #333;
     border: 1px solid #ddd;
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 13px;
+    border-radius: 4px;
     cursor: pointer;
+    font-size: 14px;
     transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-    width: 100%;
-    justify-content: center;
 }
+
 .admin-btn:hover {
-    background: #f0f0f0;
-    border-color: #999;
+    background: #f8f9fa;
+    border-color: #adb5bd;
 }
+
 .admin-btn.logout {
-    color: #666;
+    background: #6c757d;
+    color: #fff;
+    border-color: #6c757d;
 }
+
 .admin-btn.logout:hover {
-    background: #fee;
-    border-color: #c99;
-    color: #c00;
+    background: #5a6268;
 }
+
 .admin-btn.danger {
-    color: #c0392b;
-    border-color: #e0b0b0;
+    background: #dc3545;
+    color: #fff;
+    border-color: #dc3545;
 }
+
 .admin-btn.danger:hover {
-    background: #fee;
-    border-color: #c0392b;
+    background: #c82333;
 }
 
-/* Главная страница */
-#main-page {
-    background: #fff;
-    min-height: 100vh;
-}
-
-/* ПАПКИ */
-.folder-card {
-    cursor: pointer;
-    position: relative;
-}
-.folder-card.hidden-folder {
+.admin-btn:disabled {
+    cursor: not-allowed;
     opacity: 0.5;
 }
-.folder-card__image {
+
+/* ========== ПАПКИ ========== */
+#folders-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    list-style: none;
+    padding: 0;
+}
+
+.folder-card {
     position: relative;
+    width: 300px;
+    cursor: pointer;
+    transition: transform 0.2s;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.folder-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.folder-card.sortable-drag {
+    opacity: 0.5;
+}
+
+.folder-card.hidden-folder {
+    opacity: 0.4;
+}
+
+.folder-card__image {
     width: 100%;
-    height: 360px;
-    background-size: cover;
-    background-position: center;
-    background-repeat: no-repeat;
+    height: 200px;
+    object-fit: cover;
+    display: block;
 }
 
-/* ПУНКТ 3: название и счётчик крупнее */
+.folder-card__content {
+    padding: 15px;
+}
+
 .folder-card__title {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
-    color: #fff;
-    padding: 50px 15px 15px;
-    font-size: 21px;
+    font-size: 18px;
     font-weight: 600;
-}
-.folder-card__title span {
-    font-size: 16px;
-    font-weight: 400;
-    opacity: 0.85;
+    margin: 0 0 8px 0;
+    color: #333;
 }
 
-/* ПУНКТ 2: в режиме редактирования прячем название и счётчик */
-.folder-card.editing .folder-card__title {
+.folder-card__description {
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+    line-height: 1.4;
+}
+
+.folder-card__drag-handle {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(255,255,255,0.9);
+    border-radius: 4px;
+    padding: 8px;
+    cursor: grab;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     display: none;
 }
 
-.folder-card__admin-actions {
+.admin-mode .folder-card__drag-handle {
+    display: block;
+}
+
+.folder-card__drag-handle:active {
+    cursor: grabbing;
+}
+
+.folder-card__admin-badge {
     position: absolute;
     top: 10px;
     right: 10px;
-    display: flex;
-    gap: 5px;
-    opacity: 0;
-    transition: opacity 0.3s;
-    z-index: 10;
-}
-.folder-card:hover .folder-card__admin-actions {
-    opacity: 1;
-}
-.folder-card__admin-actions button {
-    background: rgba(255,255,255,0.95);
-    border: none;
-    padding: 6px 10px;
+    background: rgba(255,255,255,0.9);
     border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: all 0.2s;
-}
-.folder-card__admin-actions button:hover {
-    background: #fff;
-    transform: scale(1.1);
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #666;
+    display: none;
 }
 
-/* Редактирование превью */
-.preview-editor {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 10;
-    pointer-events: none;
-}
-.preview-editor__btn {
-    position: absolute;
-    width: 26px;
-    height: 26px;
-    background: rgba(255,255,255,0.15);
-    color: #fff;
-    border: 1px solid rgba(255,255,255,0.5);
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    pointer-events: auto;
-    transition: background 0.15s;
-    line-height: 1;
-    text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-}
-.preview-editor__btn:hover {
-    background: rgba(255,255,255,0.35);
-}
-.preview-editor__btn.up {
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-.preview-editor__btn.down {
-    bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
-}
-.preview-editor__btn.left {
-    left: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-}
-.preview-editor__btn.right {
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
+.admin-mode .folder-card__admin-badge {
+    display: block;
 }
 
-/* ПУНКТ 2: кнопки − Сохранить + строго симметрично */
-.preview-editor__btn.save {
-    bottom: 8px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: auto;
-    padding: 0 12px;
-    border-radius: 4px;
-    font-size: 11px;
-    background: rgba(39,174,96,0.85);
-    border-color: rgba(39,174,96,0.9);
-    white-space: nowrap;
-    height: 26px;
-}
-.preview-editor__btn.save:hover {
-    background: rgba(46,204,113,0.95);
-}
-.preview-editor__btn.zoom-out {
-    bottom: 8px;
-    right: calc(50% + 52px);
-    font-size: 16px;
-    width: 26px;
-}
-.preview-editor__btn.zoom-in {
-    bottom: 8px;
-    left: calc(50% + 52px);
-    font-size: 16px;
-    width: 26px;
-}
-
-.folder-card.editing {
-    box-shadow: 0 0 0 3px #3498db;
-}
-.folder-card.editing .folder-card__admin-actions {
-    opacity: 0;
-    pointer-events: none;
-}
-
-/* Drag & drop */
-.sortable-ghost {
-    opacity: 0.4;
-    background: #f0f0f0;
-}
-.sortable-drag {
-    cursor: move;
-}
-
-/* Страница папки */
-#folder-page {
-    background: #fff;
-    min-height: 100vh;
-}
+/* ========== СТРАНИЦА ПАПКИ ========== */
 .folder-cover-strip {
-    height: 120px;
+    width: 100%;
+    height: 200px;
     overflow: hidden;
     position: relative;
 }
+
 .folder-cover-strip__image {
     width: 100%;
     height: 100%;
     background-size: cover;
     background-position: center;
+    filter: brightness(0.7);
 }
+
 .folder-title-bar {
-    padding: 25px 40px 15px;
     background: #fff;
-    text-align: right;
-    border-bottom: 1px solid #eee;
+    padding: 30px 0;
+    text-align: center;
+    border-bottom: 1px solid #e9ecef;
 }
+
 .folder-title-bar h2 {
     margin: 0;
-    font-size: 36px;
-    font-weight: 700;
-    color: #000;
-    font-family: 'TildaSans', Arial, sans-serif;
-    letter-spacing: 1px;
+    font-size: 32px;
+    font-weight: 600;
+    color: #333;
 }
+
 .folder-content {
     display: flex;
-    padding: 25px 40px 60px;
-    gap: 30px;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+    gap: 40px;
 }
+
 .folder-sidebar {
-    width: 160px;
+    width: 200px;
     flex-shrink: 0;
 }
+
 .back-link {
-    color: #000;
-    text-decoration: none;
-    font-size: 15px;
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    white-space: nowrap;
-    font-weight: 500;
-    margin-bottom: 15px;
-}
-.back-link:hover {
-    font-weight: bold;
+    padding: 10px 16px;
+    background: #f8f9fa;
+    border-radius: 4px;
     text-decoration: none;
+    color: #495057;
+    font-size: 14px;
+    transition: all 0.2s;
 }
+
+.back-link:hover {
+    background: #e9ecef;
+    color: #212529;
+}
+
 .back-arrow {
     font-size: 18px;
 }
-.sidebar-admin-buttons {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
-}
-.sidebar-admin-buttons .admin-btn {
-    width: 100%;
-    margin-bottom: 0;
-    font-size: 12px;
-    padding: 6px 10px;
+
+.photos-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
 }
 
-/* Сетка фото */
-.photos-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    flex: 1;
-}
-.photo-item {
-    aspect-ratio: 1;
-    background: #eee;
-    cursor: pointer;
-    background-size: cover;
-    background-position: center;
+.photo-card {
     position: relative;
-    border-radius: 4px;
+    aspect-ratio: 1;
     overflow: hidden;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #f8f9fa;
 }
-.photo-item.hidden-photo {
+
+.photo-card.hidden-photo {
     opacity: 0.3;
 }
-.photo-item__admin-actions {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    display: flex;
-    gap: 5px;
-    opacity: 0;
-    transition: opacity 0.3s;
-}
-.photo-item:hover .photo-item__admin-actions {
-    opacity: 1;
-}
-.photo-item__admin-actions button {
-    background: rgba(255,255,255,0.95);
-    border: none;
-    padding: 5px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 11px;
+
+.photo-card__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s;
 }
 
-/* ПУНКТ 1: Fullscreen — как в Telegram, поверх всего от края до края */
+.photo-card:hover .photo-card__image {
+    transform: scale(1.05);
+}
+
+.photo-card__checkbox {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 24px;
+    height: 24px;
+    cursor: pointer;
+    z-index: 10;
+    display: none;
+}
+
+.selection-mode .photo-card__checkbox {
+    display: block;
+}
+
+.photo-card.selected {
+    outline: 3px solid #007bff;
+    outline-offset: -3px;
+}
+
+/* ========== FULLSCREEN VIEWER ========== */
 .fullscreen-viewer {
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 10001;
-    display: none;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: stretch;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.95);
 }
+
 .fullscreen-viewer__overlay {
     position: absolute;
     top: 0;
     left: 0;
+    right: 0;
+    bottom: 0;
+    cursor: pointer;
+}
+
+.fullscreen-viewer__wrapper {
+    position: relative;
     width: 100%;
     height: 100%;
-    background: rgba(0,0,0,0.95);
-}
-/* Фото занимает почти весь экран — небольшой отступ сверху под кнопки */
-.fullscreen-viewer__wrapper {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
-    right: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 70px 80px 20px;
-    box-sizing: border-box;
 }
+
 .fullscreen-viewer__image-container {
     position: relative;
-    z-index: 1;
     width: 100%;
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    touch-action: pan-y;
+    overflow: hidden;
 }
-.fullscreen-viewer img {
+
+.fullscreen-viewer__image-container img {
     max-width: 100%;
     max-height: 100%;
     width: auto;
     height: auto;
-    display: block;
     object-fit: contain;
-    border-radius: 4px;
+    transition: transform 0.3s ease;
+    cursor: grab;
 }
-.fullscreen-viewer__close {
-    display: none; /* крестик теперь в панели кнопок */
+
+.fullscreen-viewer__image-container img.zoomed {
+    cursor: grabbing;
+    max-width: none;
+    max-height: none;
 }
+
 .fullscreen-viewer__nav {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
-    background: none;
+    background: rgba(255, 255, 255, 0.1);
     border: none;
-    color: rgba(255,255,255,0.4);
-    font-size: 60px;
+    color: #fff;
+    font-size: 48px;
+    width: 60px;
+    height: 60px;
     cursor: pointer;
-    z-index: 2;
-    padding: 20px;
-    line-height: 1;
-    transition: all 0.3s;
-    outline: none !important;
-    -webkit-tap-highlight-color: transparent;
-    width: 70px;
-    height: 100px;
+    z-index: 10001;
+    transition: all 0.2s;
+    border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
 }
-.fullscreen-viewer__nav:focus,
-.fullscreen-viewer__nav:active,
-.fullscreen-viewer__nav:focus-visible {
-    outline: none !important;
-    box-shadow: none !important;
-    border: none !important;
-}
+
 .fullscreen-viewer__nav:hover {
-    color: #fff;
-}
-.fullscreen-viewer__prev {
-    left: 5px;
-}
-.fullscreen-viewer__next {
-    right: 5px;
-}
-/* Панель кнопок — правый верхний угол как в Telegram */
-.fullscreen-viewer__actions {
-    position: fixed;
-    top: 10px;
-    right: 10px;
-    display: flex;
-    flex-direction: row;
-    gap: 4px;
-    z-index: 10003;
-    background: rgba(0,0,0,0.55);
-    padding: 6px 8px;
-    border-radius: 10px;
-    backdrop-filter: blur(8px);
-    align-items: center;
+    background: rgba(255, 255, 255, 0.2);
 }
 
-/* Каждая кнопка — круглая, иконка + подпись */
+.fullscreen-viewer__prev {
+    left: 20px;
+}
+
+.fullscreen-viewer__next {
+    right: 20px;
+}
+
+/* Кнопки действий в правом верхнем углу */
+.fullscreen-viewer__actions {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 10002;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-end;
+}
+
 .fv-action-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 3px;
-    background: transparent;
-    border: none;
-    color: rgba(255,255,255,0.75);
-    cursor: pointer;
-    padding: 6px 8px;
-    border-radius: 8px;
-    transition: background 0.2s, color 0.2s;
-    text-decoration: none;
-    min-width: 50px;
-}
-.fv-action-btn:hover {
-    background: rgba(255,255,255,0.15);
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     color: #fff;
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 500;
+    min-width: 90px;
 }
-.fv-action-btn svg {
+
+.fv-action-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+}
+
+.fv-action-btn i {
     width: 20px;
     height: 20px;
-    stroke-width: 1.8;
 }
+
 .fv-action-btn span {
-    font-size: 10px;
     white-space: nowrap;
-    letter-spacing: 0.2px;
 }
+
 .fv-action-btn--danger {
-    color: rgba(255,160,140,0.85);
+    background: rgba(220, 53, 69, 0.2);
+    border-color: rgba(220, 53, 69, 0.3);
 }
+
 .fv-action-btn--danger:hover {
-    background: rgba(231,76,60,0.2);
-    color: #ff8a7a;
+    background: rgba(220, 53, 69, 0.3);
+    border-color: rgba(220, 53, 69, 0.4);
 }
 
-/* Разделитель между группами кнопок */
-.fv-action-separator {
-    width: 1px;
-    height: 30px;
-    background: rgba(255,255,255,0.2);
-    margin: 0 2px;
-}
-
-/* Загрузка */
-.loading {
-    text-align: center;
-    padding: 60px;
-    font-size: 18px;
-    color: #666;
-    grid-column: 1 / -1;
-}
-.empty-state {
-    text-align: center;
-    padding: 60px;
-    color: #666;
-    grid-column: 1 / -1;
-}
-
-/* Стрелка на главной */
-.t-cover__arrow-wrapper {
-    cursor: pointer;
-}
-
-/* Кнопка обновления */
-.refresh-btn {
-    background: transparent;
-    border: 1px solid rgba(0,0,0,0.3);
-    padding: 8px 24px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-size: 13px;
-    color: #666;
-    transition: all 0.3s;
-    margin-left: 10px;
-}
-.refresh-btn:hover {
-    background: #000;
-    color: #fff;
-    border-color: #000;
-}
-
-/* Базовые стили */
-body {
-    overflow-x: hidden;
-    width: 100%;
-    max-width: 100vw;
-}
-html, body {
-    overflow-x: hidden !important;
-    width: 100% !important;
-    max-width: 100vw !important;
-}
-
-/* ФУТЕР */
-.t-tildalabel {
-    width: 100%;
-    height: auto;
-    text-align: center;
-    clear: both;
-}
-.t-tildalabel-free {
-    background-color: #000;
-    color: #fff;
-    padding: 40px 0;
-}
-.t-tildalabel-free__main {
-    text-align: center;
-    padding: 0;
-}
-.t-tildalabel-free__main a {
-    color: #fff;
-    text-decoration: none;
-}
-
-/* Разделитель */
-#rec-divider {
-    padding-top: 60px !important;
-    padding-bottom: 60px !important;
-}
-
-/* Если админ-панель скрыта */
-#admin-panel[style*="display:none"],
-#admin-panel[style*="display: none"] {
-    display: none !important;
-    height: 0 !important;
-    padding: 0 !important;
-    margin: 0 !important;
-}
-
-#load-more-folders-container,
-#load-more-photos-container {
-    max-width: 100%;
-    box-sizing: border-box;
-}
-
-#photo-upload {
-    position: absolute;
-    left: -9999px;
-    opacity: 0;
-}
-
-/* ==================== */
-/* МЕДИА-ЗАПРОСЫ        */
-/* ==================== */
-
-@media (max-width: 1200px) {
-    .photos-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
-    .folder-title-bar h2 {
-        font-size: 28px;
-    }
-}
-
-@media (max-width: 768px) {
-    .admin-panel__buttons {
-        flex-direction: column;
-        align-items: center;
-    }
-    .admin-panel__buttons .admin-btn {
-        width: 90% !important;
-        min-width: 200px !important;
-        max-width: 300px !important;
-    }
-    .folder-content {
-        flex-direction: column;
-        padding: 20px;
-    }
-    .folder-sidebar {
-        width: 100%;
-    }
-    .photos-grid {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 10px;
-    }
-    .folder-title-bar {
-        padding: 15px 20px;
-        text-align: left;
-    }
-    .folder-title-bar h2 {
-        font-size: 24px;
-    }
-    .preview-editor__btn {
-        width: 24px;
-        height: 24px;
-        font-size: 12px;
-    }
-    .preview-editor__btn.zoom-out,
-    .preview-editor__btn.zoom-in {
-        width: 24px;
-        height: 24px;
-        font-size: 14px;
-    }
-    .folder-card__admin-actions {
-        opacity: 1;
-    }
-    .photo-item__admin-actions {
-        opacity: 1 !important;
-        display: flex !important;
-    }
-    .photo-item__admin-actions button {
-        padding: 4px 6px;
-        font-size: 11px;
-    }
-
-    /* Fullscreen на мобильных */
-    .fullscreen-viewer__prev,
-    .fullscreen-viewer__next {
-        display: none !important;
-    }
-    .fullscreen-viewer__wrapper {
-        top: 50px;
-        bottom: 70px;
-        padding: 0 10px;
-    }
-    /* На мобильных панель кнопок немного компактнее */
-    .fullscreen-viewer__actions {
-        gap: 2px;
-        padding: 4px 6px;
-    }
-    .fv-action-btn {
-        min-width: 40px;
-        padding: 5px 6px;
-    }
-    .fv-action-btn span {
-        font-size: 9px;
-    }
-    .fullscreen-viewer__wrapper {
-        padding: 65px 10px 10px;
-    }
-
-    .t-cover {
-        height: 90vh !important;
-    }
-    .t-cover__carrier,
-    .t-cover__filter,
-    .t-cover__wrapper {
-        height: 90vh !important;
-    }
-    .t-cover__arrow {
-        bottom: 80px !important;
-    }
-    .t-tildalabel-free {
-        padding: 30px 0;
-    }
-
-    #clear-storage-modal .admin-modal__content {
-        border: 3px solid #e74c3c !important;
-    }
-    #clear-storage-password {
-        width: 100%;
-        padding: 12px;
-        border: 2px solid #ddd;
-        border-radius: 4px;
-        font-size: 16px;
-        box-sizing: border-box;
-    }
-    #clear-storage-password:focus {
-        border-color: #e74c3c;
-        outline: none;
-    }
-}
-
-/* =============================== */
-/* ЭФФЕКТ НАВЕДЕНИЯ НА ПАПКИ       */
-/* =============================== */
-.folder-card {
-    cursor: pointer;
-    position: relative;
-    transition:
-        transform 0.28s cubic-bezier(.4,0,.2,1),
-        box-shadow 0.28s cubic-bezier(.4,0,.2,1);
-    will-change: transform;
-}
-.folder-card:hover {
-    transform: translateY(-4px) scale(1.025);
-    box-shadow: 0 14px 35px rgba(0, 0, 0, 0.18);
-    z-index: 5;
-}
-.folder-card.editing,
-.folder-card.editing:hover {
-    transform: none;
-    box-shadow: 0 0 0 3px #3498db;
-}
-.sortable-drag,
-.sortable-ghost {
-    transform: none !important;
-    box-shadow: none !important;
-}
-#folders-container {
-    overflow: visible;
-}
-
-/* Панель выбора фото */
-#selection-toolbar {
-    width: 100%;
-}
-#selection-toolbar .admin-btn {
-    width: 100%;
-    margin-bottom: 0;
-    border-radius: 50px;
-    transition: all 0.28s cubic-bezier(.4,0,.2,1);
-    background: #f0f0f0;
-    border: 1px solid #ddd;
-    color: #333;
-}
-#selection-toolbar .admin-btn:hover {
-    transform: translateY(-2px) scale(1.02);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-}
-#selection-toolbar .admin-btn.danger {
-    color: #c0392b;
-    border-color: #e0b0b0;
-}
-#selection-toolbar .admin-btn.danger:hover {
-    background: #fee;
-    border-color: #c0392b;
-}
-#selection-toolbar .admin-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
-
-/* Чекбоксы на фото */
-.photo-checkbox-custom {
-    position: absolute;
-    top: 10px;
-    left: 10px;
-    width: 28px;
-    height: 28px;
-    background: rgba(255,255,255,0.9);
-    border: 2px solid #27ae60;
-    border-radius: 4px;
-    cursor: pointer;
-    z-index: 10;
+/* ========== МОДАЛЬНЫЕ ОКНА ========== */
+.admin-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+}
+
+.admin-modal__overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+}
+
+.admin-modal__content {
+    position: relative;
+    background: #fff;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    max-width: 400px;
+    width: 90%;
+    z-index: 10000;
+}
+
+.admin-modal__content h3 {
+    margin: 0 0 20px 0;
+    font-size: 22px;
+    color: #333;
+}
+
+.admin-modal__content input[type="password"] {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+
+.admin-modal__content button {
+    width: 100%;
+    padding: 12px;
+    background: #007bff;
     color: #fff;
-    transition: all 0.2s;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 15px;
+    transition: background 0.2s;
 }
-.photo-checkbox-custom.checked {
-    background: #27ae60;
-    border-color: #27ae60;
+
+.admin-modal__content button:hover {
+    background: #0056b3;
 }
-.photo-checkbox-custom:hover {
-    transform: scale(1.1);
-    box-shadow: 0 3px 8px rgba(0,0,0,0.3);
+
+.admin-error {
+    color: #dc3545;
+    font-size: 14px;
+    margin: 10px 0 0 0;
+    display: none;
 }
+
+/* ========== АДАПТИВНОСТЬ ========== */
 @media (max-width: 768px) {
-    .photo-checkbox-custom {
-        opacity: 1;
-        width: 32px;
-        height: 32px;
-        font-size: 18px;
+    .folder-content {
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .folder-sidebar {
+        width: 100%;
+    }
+
+    .photos-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+    }
+
+    .fullscreen-viewer__nav {
+        width: 50px;
+        height: 50px;
+        font-size: 36px;
+    }
+
+    .fullscreen-viewer__prev {
+        left: 10px;
+    }
+
+    .fullscreen-viewer__next {
+        right: 10px;
+    }
+
+    .fullscreen-viewer__actions {
+        top: 10px;
+        right: 10px;
+        gap: 8px;
+    }
+
+    .fv-action-btn {
+        min-width: 80px;
+        padding: 10px 12px;
+        font-size: 11px;
+    }
+
+    .fv-action-btn i {
+        width: 18px;
+        height: 18px;
     }
 }

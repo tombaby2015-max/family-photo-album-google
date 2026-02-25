@@ -458,7 +458,10 @@
     padding: 10px 80px;
     box-sizing: border-box;
 }
-/* Анимация перелистывания фото на мобильных */
+/* Скрытие admin-only кнопок для гостей */
+.fv-action-btn--admin-only {
+    display: none !important;
+}
 .fullscreen-viewer__image-container {
     position: relative;
     z-index: 1;
@@ -470,8 +473,9 @@
     touch-action: pan-y;
     overflow: hidden;
 }
-
-.fullscreen-viewer img {
+/* Оба img-элемента абсолютные, анимируются вместе */
+.fullscreen-viewer__image-container img {
+    position: absolute;
     max-width: 100%;
     max-height: 100%;
     width: auto;
@@ -479,29 +483,15 @@
     display: block;
     object-fit: contain;
     border-radius: 4px;
-    transition: transform 0.3s cubic-bezier(.4,0,.2,1), opacity 0.3s ease;
+    transition: transform 0.32s cubic-bezier(.4,0,.2,1), opacity 0.32s ease;
     will-change: transform, opacity;
 }
-
-/* Классы для анимации смены фото */
-.fv-slide-out-left {
-    transform: translateX(-60px) !important;
-    opacity: 0 !important;
-}
-.fv-slide-out-right {
-    transform: translateX(60px) !important;
-    opacity: 0 !important;
-}
-.fv-slide-in-left {
-    transform: translateX(60px);
-    opacity: 0;
-    transition: none !important;
-}
-.fv-slide-in-right {
-    transform: translateX(-60px);
-    opacity: 0;
-    transition: none !important;
-}
+/* Состояния анимации */
+.fv-img-current  { transform: translateX(0);    opacity: 1; }
+.fv-img-out-left { transform: translateX(-40%);  opacity: 0; }
+.fv-img-out-right{ transform: translateX(40%);   opacity: 0; }
+.fv-img-in-left  { transform: translateX(40%);   opacity: 0; transition: none !important; }
+.fv-img-in-right { transform: translateX(-40%);  opacity: 0; transition: none !important; }
 .fullscreen-viewer__close {
     display: none; /* крестик теперь в панели кнопок */
 }
@@ -555,15 +545,15 @@
     padding: 6px 8px;
     border-radius: 10px;
     backdrop-filter: blur(8px);
-    align-items: center;
+    align-items: stretch;
 }
 
-/* Каждая кнопка — круглая, иконка + подпись */
+/* Каждая кнопка — иконка сверху, подпись снизу */
 .fv-action-btn {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
     gap: 3px;
     background: transparent;
     border: none;
@@ -773,7 +763,9 @@ html, body {
         display: none !important;
     }
     .fullscreen-viewer__wrapper {
-        padding: 10px;
+        top: 50px;
+        bottom: 70px;
+        padding: 0 10px;
     }
     /* На мобильных панель кнопок немного компактнее */
     .fullscreen-viewer__actions {
@@ -786,6 +778,9 @@ html, body {
     }
     .fv-action-btn span {
         font-size: 9px;
+    }
+    .fullscreen-viewer__wrapper {
+        padding: 10px;
     }
 
     .t-cover {

@@ -149,8 +149,9 @@ var admin = {
                 if (!dragged || !target) return;
 
                 // Делаем настоящий swap в DOM
-                var draggedNext = dragged.nextSibling;
-                var targetNext = target.nextSibling;
+                // Используем nextElementSibling (не nextSibling) чтобы пропустить текстовые узлы
+                var draggedNext = dragged.nextElementSibling;
+                var targetNext = target.nextElementSibling;
 
                 if (draggedNext === target) {
                     container.insertBefore(target, dragged);
@@ -313,6 +314,20 @@ var admin = {
     },
 
     // === СЕКЦИИ ===
+    // Включить режим секций
+    enableSectionMode: function() {
+        var btn = document.getElementById('btn-add-section');
+        if (btn) btn.style.display = 'block';
+        var btnEnable = document.getElementById('btn-enable-sections');
+        if (btnEnable) btnEnable.style.display = 'none';
+        gallery.sectionModeActive = true;
+        // Перерисовываем фото в режиме секций
+        if (gallery.currentFolder) {
+            gallery.renderPhotos(0);
+            setTimeout(function() { admin.initPhotosSortable(); }, 150);
+        }
+    },
+
     addSection: function() {
         if (!gallery.currentFolder) return;
         var title = prompt('Название секции (например: 2014):');

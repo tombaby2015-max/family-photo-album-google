@@ -384,6 +384,16 @@ var gallery = {
         var link = document.getElementById('download-link');
         var viewer = document.getElementById('fullscreen-viewer');
 
+        var btnCover = document.getElementById('btn-set-cover');
+        var btnDelete = document.getElementById('btn-delete-photo');
+        if (api.isAdmin()) {
+            if (btnCover) btnCover.classList.remove('fv-action-btn--admin-only');
+            if (btnDelete) btnDelete.classList.remove('fv-action-btn--admin-only');
+        } else {
+            if (btnCover) btnCover.classList.add('fv-action-btn--admin-only');
+            if (btnDelete) btnDelete.classList.add('fv-action-btn--admin-only');
+        }
+
         if (img) {
             img.src = photo.thumbUrl || '';
         }
@@ -393,18 +403,8 @@ var gallery = {
         }
         if (viewer) viewer.style.display = 'flex';
 
-        // Сброс зума при открытии нового фото
-        this._resetZoom();
-
-        // Инициализируем иконки Lucide ДО установки видимости кнопок,
-        // чтобы Lucide не сбросил display:none на admin-кнопках
+        // Инициализируем иконки Lucide
         if (typeof lucide !== 'undefined') lucide.createIcons();
-
-        // Показываем admin-кнопки только после инициализации Lucide
-        var btnCover = document.getElementById('btn-set-cover');
-        var btnDelete = document.getElementById('btn-delete-photo');
-        if (btnCover) btnCover.style.display = api.isAdmin() ? 'flex' : 'none';
-        if (btnDelete) btnDelete.style.display = api.isAdmin() ? 'flex' : 'none';
 
         var self = this;
         if (this.keyHandler) document.removeEventListener('keydown', this.keyHandler);
@@ -432,50 +432,8 @@ var gallery = {
         };
     },
 
-    // === ЗУМ ФОТО ===
-    _zoomLevel: 1,
-    _zoomMax: 3,
-
-    zoomIn: function() {
-        if (this._zoomLevel >= this._zoomMax) return;
-        this._zoomLevel = Math.min(this._zoomMax, this._zoomLevel + 0.5);
-        this._applyZoom();
-    },
-
-    zoomOut: function() {
-        if (this._zoomLevel <= 1) return;
-        this._zoomLevel = Math.max(1, this._zoomLevel - 0.5);
-        this._applyZoom();
-    },
-
-    _applyZoom: function() {
-        var img = document.getElementById('fullscreen-image');
-        if (!img) return;
-        img.style.transform = 'scale(' + this._zoomLevel + ')';
-        img.style.transformOrigin = 'center center';
-        img.style.cursor = this._zoomLevel > 1 ? 'zoom-out' : 'default';
-        // Обновляем состояние кнопок
-        var btnIn = document.getElementById('btn-zoom-in');
-        var btnOut = document.getElementById('btn-zoom-out');
-        if (btnIn) btnIn.style.opacity = this._zoomLevel >= this._zoomMax ? '0.35' : '1';
-        if (btnOut) btnOut.style.opacity = this._zoomLevel <= 1 ? '0.35' : '1';
-    },
-
-    _resetZoom: function() {
-        this._zoomLevel = 1;
-        var img = document.getElementById('fullscreen-image');
-        if (img) {
-            img.style.transform = '';
-            img.style.cursor = 'default';
-        }
-        var btnIn = document.getElementById('btn-zoom-in');
-        var btnOut = document.getElementById('btn-zoom-out');
-        if (btnIn) btnIn.style.opacity = '1';
-        if (btnOut) btnOut.style.opacity = '0.35';
-    },
 
     closeFullscreen: function() {
-        this._resetZoom();
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'none';
         if (this.keyHandler) {

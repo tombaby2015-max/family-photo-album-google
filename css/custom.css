@@ -96,7 +96,6 @@
     transition: all 0.28s cubic-bezier(.4,0,.2,1);
     cursor: pointer;
 }
-
 .admin-panel__buttons .admin-btn:hover {
     background: #555;
     color: #fff;
@@ -148,7 +147,7 @@
     min-height: 100vh;
 }
 
-/* ПАПКИ - 360x360 как в эталоне */
+/* ПАПКИ */
 .folder-card {
     cursor: pointer;
     position: relative;
@@ -156,8 +155,6 @@
 .folder-card.hidden-folder {
     opacity: 0.5;
 }
-
-/* ИСПРАВЛЕНО: высота 360px как в эталоне */
 .folder-card__image {
     position: relative;
     width: 100%;
@@ -167,6 +164,7 @@
     background-repeat: no-repeat;
 }
 
+/* ПУНКТ 3: название и счётчик крупнее */
 .folder-card__title {
     position: absolute;
     bottom: 0;
@@ -175,8 +173,18 @@
     background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
     color: #fff;
     padding: 50px 15px 15px;
-    font-size: 18px;
+    font-size: 21px;
     font-weight: 600;
+}
+.folder-card__title span {
+    font-size: 16px;
+    font-weight: 400;
+    opacity: 0.85;
+}
+
+/* ПУНКТ 2: в режиме редактирования прячем название и счётчик */
+.folder-card.editing .folder-card__title {
+    display: none;
 }
 
 .folder-card__admin-actions {
@@ -257,30 +265,35 @@
     top: 50%;
     transform: translateY(-50%);
 }
-.preview-editor__btn.zoom-out {
-    bottom: 8px;
-    left: calc(50% - 88px);
-    font-size: 16px;
-}
-.preview-editor__btn.zoom-in {
-    bottom: 8px;
-    left: calc(50% + 42px);
-    font-size: 16px;
-}
+
+/* ПУНКТ 2: кнопки − Сохранить + строго симметрично */
 .preview-editor__btn.save {
     bottom: 8px;
     left: 50%;
     transform: translateX(-50%);
     width: auto;
-    padding: 0 10px;
+    padding: 0 12px;
     border-radius: 4px;
     font-size: 11px;
     background: rgba(39,174,96,0.85);
     border-color: rgba(39,174,96,0.9);
     white-space: nowrap;
+    height: 26px;
 }
 .preview-editor__btn.save:hover {
     background: rgba(46,204,113,0.95);
+}
+.preview-editor__btn.zoom-out {
+    bottom: 8px;
+    right: calc(50% + 52px);
+    font-size: 16px;
+    width: 26px;
+}
+.preview-editor__btn.zoom-in {
+    bottom: 8px;
+    left: calc(50% + 52px);
+    font-size: 16px;
+    width: 26px;
 }
 
 .folder-card.editing {
@@ -411,7 +424,7 @@
     font-size: 11px;
 }
 
-/* Fullscreen */
+/* ПУНКТ 1: Fullscreen — как в Telegram, поверх всего от края до края */
 .fullscreen-viewer {
     position: fixed;
     top: 0;
@@ -420,8 +433,9 @@
     height: 100%;
     z-index: 10001;
     display: none;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: stretch;
 }
 .fullscreen-viewer__overlay {
     position: absolute;
@@ -431,41 +445,50 @@
     height: 100%;
     background: rgba(0,0,0,0.95);
 }
+/* Фото занимает всё пространство между крестиком и кнопками */
 .fullscreen-viewer__wrapper {
-    position: relative;
+    position: absolute;
+    top: 50px;      /* отступ под крестик */
+    bottom: 60px;   /* отступ под кнопки */
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    max-width: 95%;
-    max-height: 85vh;
     padding: 0 80px;
     box-sizing: border-box;
 }
 .fullscreen-viewer__image-container {
     position: relative;
     z-index: 1;
-    max-width: 100%;
-    max-height: 85vh;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     touch-action: pan-y;
 }
 .fullscreen-viewer img {
     max-width: 100%;
-    max-height: 85vh;
+    max-height: 100%;
+    width: auto;
+    height: auto;
     display: block;
+    object-fit: contain;
     border-radius: 4px;
 }
 .fullscreen-viewer__close {
     position: fixed;
-    top: 15px;
-    right: 25px;
+    top: 12px;
+    right: 20px;
     background: none;
     border: none;
     color: #fff;
     font-size: 36px;
     cursor: pointer;
-    z-index: 2;
+    z-index: 10003;
     line-height: 1;
-    opacity: 0.6;
+    opacity: 0.7;
     transition: opacity 0.3s;
 }
 .fullscreen-viewer__close:hover {
@@ -503,11 +526,12 @@
     color: #fff;
 }
 .fullscreen-viewer__prev {
-    left: -60px;
+    left: 5px;
 }
 .fullscreen-viewer__next {
-    right: -60px;
+    right: 5px;
 }
+/* Кнопки внизу — фиксированные, всегда видны */
 .fullscreen-viewer__buttons {
     position: fixed;
     bottom: 15px;
@@ -515,7 +539,7 @@
     transform: translateX(-50%);
     display: flex;
     gap: 8px;
-    z-index: 2;
+    z-index: 10003;
     background: rgba(0,0,0,0.7);
     padding: 6px;
     border-radius: 6px;
@@ -614,7 +638,7 @@ html, body {
     max-width: 100vw !important;
 }
 
-/* ИСПРАВЛЕНО: ФУТЕР - симметричные отступы */
+/* ФУТЕР */
 .t-tildalabel {
     width: 100%;
     height: auto;
@@ -624,7 +648,7 @@ html, body {
 .t-tildalabel-free {
     background-color: #000;
     color: #fff;
-    padding: 40px 0; /* симметричные отступы сверху и снизу */
+    padding: 40px 0;
 }
 .t-tildalabel-free__main {
     text-align: center;
@@ -635,7 +659,7 @@ html, body {
     text-decoration: none;
 }
 
-/* ИСПРАВЛЕНО: Разделитель t029 - одинаковые отступы */
+/* Разделитель */
 #rec-divider {
     padding-top: 60px !important;
     padding-bottom: 60px !important;
@@ -650,14 +674,12 @@ html, body {
     margin: 0 !important;
 }
 
-/* Проверка ширины элементов */
 #load-more-folders-container,
 #load-more-photos-container {
     max-width: 100%;
     box-sizing: border-box;
 }
 
-/* Для Оперы */
 #photo-upload {
     position: absolute;
     left: -9999px;
@@ -678,7 +700,6 @@ html, body {
 }
 
 @media (max-width: 768px) {
-    /* Админ-панель */
     .admin-panel__buttons {
         flex-direction: column;
         align-items: center;
@@ -688,8 +709,6 @@ html, body {
         min-width: 200px !important;
         max-width: 300px !important;
     }
-    
-    /* Контент папки */
     .folder-content {
         flex-direction: column;
         padding: 20px;
@@ -697,14 +716,10 @@ html, body {
     .folder-sidebar {
         width: 100%;
     }
-    
-    /* Сетка фото */
     .photos-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
     }
-    
-    /* Заголовок папки */
     .folder-title-bar {
         padding: 15px 20px;
         text-align: left;
@@ -712,8 +727,6 @@ html, body {
     .folder-title-bar h2 {
         font-size: 24px;
     }
-    
-    /* Редактор превью */
     .preview-editor__btn {
         width: 24px;
         height: 24px;
@@ -725,8 +738,6 @@ html, body {
         height: 24px;
         font-size: 14px;
     }
-    
-    /* Админ-кнопки всегда видны на мобильных */
     .folder-card__admin-actions {
         opacity: 1;
     }
@@ -738,32 +749,16 @@ html, body {
         padding: 4px 6px;
         font-size: 11px;
     }
-    
-    /* Fullscreen - убираем стрелки */
+
+    /* Fullscreen на мобильных */
     .fullscreen-viewer__prev,
     .fullscreen-viewer__next {
         display: none !important;
     }
     .fullscreen-viewer__wrapper {
-        width: 100%;
-        height: 100%;
-        max-width: 100%;
-        max-height: 100%;
-        padding: 0;
-    }
-    .fullscreen-viewer__image-container {
-        width: 100%;
-        height: 100%;
-        max-width: 100%;
-        max-height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .fullscreen-viewer img {
-        max-width: 100%;
-        max-height: 100%;
-        object-fit: contain;
+        top: 50px;
+        bottom: 70px;
+        padding: 0 10px;
     }
     .fullscreen-viewer__close {
         top: 10px;
@@ -778,11 +773,10 @@ html, body {
         justify-content: center;
     }
     .fullscreen-viewer__buttons {
-        bottom: 20px;
-        padding: 10px;
+        bottom: 15px;
+        padding: 8px;
     }
-    
-    /* Главная страница */
+
     .t-cover {
         height: 90vh !important;
     }
@@ -794,36 +788,30 @@ html, body {
     .t-cover__arrow {
         bottom: 80px !important;
     }
-    
-    /* Футер на мобильных */
     .t-tildalabel-free {
         padding: 30px 0;
     }
-/* Модальное окно очистки хранилища */
-#clear-storage-modal .admin-modal__content {
-    border: 3px solid #e74c3c !important;
-}
 
-#clear-storage-password {
-    width: 100%;
-    padding: 12px;
-    border: 2px solid #ddd;
-    border-radius: 4px;
-    font-size: 16px;
-    box-sizing: border-box;
-}
-
-#clear-storage-password:focus {
-    border-color: #e74c3c;
-    outline: none;
-}
-
+    #clear-storage-modal .admin-modal__content {
+        border: 3px solid #e74c3c !important;
+    }
+    #clear-storage-password {
+        width: 100%;
+        padding: 12px;
+        border: 2px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+        box-sizing: border-box;
+    }
+    #clear-storage-password:focus {
+        border-color: #e74c3c;
+        outline: none;
+    }
 }
 
 /* =============================== */
 /* ЭФФЕКТ НАВЕДЕНИЯ НА ПАПКИ       */
 /* =============================== */
-
 .folder-card {
     cursor: pointer;
     position: relative;
@@ -832,34 +820,29 @@ html, body {
         box-shadow 0.28s cubic-bezier(.4,0,.2,1);
     will-change: transform;
 }
-
 .folder-card:hover {
     transform: translateY(-4px) scale(1.025);
     box-shadow: 0 14px 35px rgba(0, 0, 0, 0.18);
     z-index: 5;
 }
-
 .folder-card.editing,
 .folder-card.editing:hover {
     transform: none;
     box-shadow: 0 0 0 3px #3498db;
 }
-
 .sortable-drag,
 .sortable-ghost {
     transform: none !important;
     box-shadow: none !important;
 }
-
 #folders-container {
     overflow: visible;
 }
 
-/* Стили для новой панели выбора фото */
+/* Панель выбора фото */
 #selection-toolbar {
     width: 100%;
 }
-
 #selection-toolbar .admin-btn {
     width: 100%;
     margin-bottom: 0;
@@ -869,29 +852,25 @@ html, body {
     border: 1px solid #ddd;
     color: #333;
 }
-
 #selection-toolbar .admin-btn:hover {
     transform: translateY(-2px) scale(1.02);
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
 }
-
 #selection-toolbar .admin-btn.danger {
     color: #c0392b;
     border-color: #e0b0b0;
 }
-
 #selection-toolbar .admin-btn.danger:hover {
     background: #fee;
     border-color: #c0392b;
 }
-
 #selection-toolbar .admin-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
 }
 
-/* Стили для чекбоксов на фото */
+/* Чекбоксы на фото */
 .photo-checkbox-custom {
     position: absolute;
     top: 10px;
@@ -911,18 +890,14 @@ html, body {
     transition: all 0.2s;
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
-
 .photo-checkbox-custom.checked {
     background: #27ae60;
     border-color: #27ae60;
 }
-
 .photo-checkbox-custom:hover {
     transform: scale(1.1);
     box-shadow: 0 3px 8px rgba(0,0,0,0.3);
 }
-
-/* На мобильных чекбоксы всегда видны */
 @media (max-width: 768px) {
     .photo-checkbox-custom {
         opacity: 1;

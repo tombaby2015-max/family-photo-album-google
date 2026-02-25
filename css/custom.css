@@ -1,4 +1,4 @@
-/* Модальное окно входа */
+/* Модальное окно входа */ 
 .admin-modal {
     position: fixed;
     top: 0;
@@ -997,3 +997,4 @@ html, body {
         font-size: 18px;
     }
 }
+

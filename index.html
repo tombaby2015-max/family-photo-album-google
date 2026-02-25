@@ -137,6 +137,9 @@
                     <button class="admin-btn" id="btn-enter-selection" onclick="admin.enterSelectionMode()" style="width:100%;margin-bottom:10px;">
                         Выбрать фото
                     </button>
+                    <button class="admin-btn" onclick="admin.addSection()" style="width:100%;margin-bottom:10px;">
+                        + Добавить секцию
+                    </button>
                     <div id="selection-toolbar" style="display:none;flex-direction:column;gap:8px;">
                         <button class="admin-btn" id="btn-select-all" onclick="admin.toggleSelectAll()" style="width:100%;">Выбрать все</button>
                         <button class="admin-btn danger" id="btn-delete-selected" onclick="admin.deleteSelectedPhotos()" disabled style="width:100%;opacity:0.5;">Удалить выбранные (0)</button>
@@ -146,7 +149,7 @@
                 </div>
             </div>
 
-            <div class="photos-grid" id="photos-container">
+            <div class="photos-container-wrap" id="photos-container">
                 <div class="loading">Загрузка фото...</div>
             </div>
         </div>

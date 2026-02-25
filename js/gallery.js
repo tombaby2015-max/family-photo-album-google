@@ -386,13 +386,8 @@ var gallery = {
 
         var btnCover = document.getElementById('btn-set-cover');
         var btnDelete = document.getElementById('btn-delete-photo');
-        if (api.isAdmin()) {
-            if (btnCover) btnCover.classList.remove('fv-action-btn--admin-only');
-            if (btnDelete) btnDelete.classList.remove('fv-action-btn--admin-only');
-        } else {
-            if (btnCover) btnCover.classList.add('fv-action-btn--admin-only');
-            if (btnDelete) btnDelete.classList.add('fv-action-btn--admin-only');
-        }
+        if (btnCover) btnCover.style.display = api.isAdmin() ? 'inline-block' : 'none';
+        if (btnDelete) btnDelete.style.display = api.isAdmin() ? 'inline-block' : 'none';
 
         if (img) {
             img.src = photo.thumbUrl || '';
@@ -402,6 +397,9 @@ var gallery = {
             link.download = photo.name || 'photo.jpg';
         }
         if (viewer) viewer.style.display = 'flex';
+
+        // Сброс зума при открытии нового фото
+        this._resetZoom();
 
         // Инициализируем иконки Lucide
         if (typeof lucide !== 'undefined') lucide.createIcons();
@@ -422,18 +420,125 @@ var gallery = {
         var imageContainer = document.querySelector('.fullscreen-viewer__image-container');
         if (!imageContainer) return;
         var startX = 0;
-        imageContainer.ontouchstart = function(e) { startX = e.changedTouches[0].screenX; };
+        var startY = 0;
+        var isDragging = false;
+
+        imageContainer.ontouchstart = function(e) {
+            startX = e.changedTouches[0].screenX;
+            startY = e.changedTouches[0].screenY;
+            isDragging = true;
+        };
+
+        imageContainer.ontouchmove = function(e) {
+            if (!isDragging) return;
+            var dx = e.changedTouches[0].screenX - startX;
+            var dy = e.changedTouches[0].screenY - startY;
+            // Если горизонтальное движение — блокируем скролл страницы
+            if (Math.abs(dx) > Math.abs(dy)) e.preventDefault();
+        };
+
         imageContainer.ontouchend = function(e) {
-            var diff = startX - e.changedTouches[0].screenX;
-            if (Math.abs(diff) > 50) {
-                if (diff > 0) self.nextPhoto();
-                else self.prevPhoto();
+            if (!isDragging) return;
+            isDragging = false;
+            var dx = e.changedTouches[0].screenX - startX;
+            var dy = e.changedTouches[0].screenY - startY;
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+                if (dx < 0) self.nextPhotoAnimated('left');
+                else self.prevPhotoAnimated('right');
             }
         };
     },
 
+    // Плавная смена фото с анимацией слайда
+    _changePhotoAnimated: function(newIndex, direction) {
+        var self = this;
+        if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
+
+        var img = document.getElementById('fullscreen-image');
+        if (!img) { self.openFullscreen(newIndex); return; }
+
+        // direction: 'left' = листаем вперёд, 'right' = назад
+        var outClass = direction === 'left' ? 'fv-slide-out-left' : 'fv-slide-out-right';
+        var inClass  = direction === 'left' ? 'fv-slide-in-left'  : 'fv-slide-in-right';
+
+        // Шаг 1: уезжаем
+        img.classList.add(outClass);
+
+        setTimeout(function() {
+            // Шаг 2: меняем фото и ставим начальную позицию
+            self.currentPhotoIndex = newIndex;
+            var photo = self.visiblePhotos[newIndex];
+            img.src = photo.thumbUrl || '';
+
+            var link = document.getElementById('download-link');
+            if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
+
+            img.classList.remove(outClass);
+            img.classList.add(inClass);
+
+            // Шаг 3: запускаем анимацию въезда (небольшая пауза чтобы браузер применил inClass)
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    img.classList.remove(inClass);
+                });
+            });
+        }, 250);
+    },
+
+    prevPhotoAnimated: function(dir) {
+        if (this.currentPhotoIndex > 0)
+            this._changePhotoAnimated(this.currentPhotoIndex - 1, dir || 'right');
+    },
+
+    nextPhotoAnimated: function(dir) {
+        if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
+            this._changePhotoAnimated(this.currentPhotoIndex + 1, dir || 'left');
+    },
+
+    // === ЗУМ ФОТО ===
+    _zoomLevel: 1,
+    _zoomMax: 3,
+
+    zoomIn: function() {
+        if (this._zoomLevel >= this._zoomMax) return;
+        this._zoomLevel = Math.min(this._zoomMax, this._zoomLevel + 0.5);
+        this._applyZoom();
+    },
+
+    zoomOut: function() {
+        if (this._zoomLevel <= 1) return;
+        this._zoomLevel = Math.max(1, this._zoomLevel - 0.5);
+        this._applyZoom();
+    },
+
+    _applyZoom: function() {
+        var img = document.getElementById('fullscreen-image');
+        if (!img) return;
+        img.style.transform = 'scale(' + this._zoomLevel + ')';
+        img.style.transformOrigin = 'center center';
+        img.style.cursor = this._zoomLevel > 1 ? 'zoom-out' : 'default';
+        // Обновляем состояние кнопок
+        var btnIn = document.getElementById('btn-zoom-in');
+        var btnOut = document.getElementById('btn-zoom-out');
+        if (btnIn) btnIn.style.opacity = this._zoomLevel >= this._zoomMax ? '0.35' : '1';
+        if (btnOut) btnOut.style.opacity = this._zoomLevel <= 1 ? '0.35' : '1';
+    },
+
+    _resetZoom: function() {
+        this._zoomLevel = 1;
+        var img = document.getElementById('fullscreen-image');
+        if (img) {
+            img.style.transform = '';
+            img.style.cursor = 'default';
+        }
+        var btnIn = document.getElementById('btn-zoom-in');
+        var btnOut = document.getElementById('btn-zoom-out');
+        if (btnIn) btnIn.style.opacity = '1';
+        if (btnOut) btnOut.style.opacity = '0.35';
+    },
 
     closeFullscreen: function() {
+        this._resetZoom();
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'none';
         if (this.keyHandler) {

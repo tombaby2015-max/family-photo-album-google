@@ -458,6 +458,10 @@
     padding: 10px 80px;
     box-sizing: border-box;
 }
+/* Скрытие admin-only кнопок для гостей */
+.fv-action-btn--admin-only {
+    display: none !important;
+}
 .fullscreen-viewer__image-container {
     position: relative;
     z-index: 1;
@@ -583,17 +587,97 @@
     color: #ff8a7a;
 }
 
-/* Скрытие admin-only кнопок для гостей — ДОЛЖНО БЫТЬ ПОСЛЕ .fv-action-btn */
-.fv-action-btn--admin-only {
-    display: none !important;
-}
-
 /* Разделитель между группами кнопок */
 .fv-action-separator {
     width: 1px;
     height: 30px;
     background: rgba(255,255,255,0.2);
     margin: 0 2px;
+}
+
+/* ======================== */
+/* СЕКЦИИ ВНУТРИ ПАПКИ      */
+/* ======================== */
+.photos-container-wrap {
+    flex: 1;
+    min-width: 0;
+}
+
+.photos-section-block {
+    margin-bottom: 10px;
+}
+
+.photos-section-header {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin: 30px 0 18px;
+    padding: 0;
+}
+
+.photos-section-line {
+    flex: 1;
+    height: 1px;
+    background: #ddd;
+}
+
+.photos-section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #333;
+    white-space: nowrap;
+    letter-spacing: 1px;
+    font-family: 'TildaSans', Arial, sans-serif;
+}
+
+.photos-section-admin-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.photos-section-admin-actions button {
+    background: none;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 3px 7px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.2s;
+}
+
+.photos-section-admin-actions button:hover {
+    background: #f0f0f0;
+}
+
+.photos-section-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    min-height: 60px; /* чтобы можно было перетащить фото в пустую секцию */
+}
+
+/* Подсветка пустой секции при перетаскивании */
+.photos-section-grid.sortable-over {
+    background: rgba(52, 152, 219, 0.05);
+    border-radius: 4px;
+    outline: 2px dashed rgba(52, 152, 219, 0.4);
+}
+
+@media (max-width: 1200px) {
+    .photos-section-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    .photos-section-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+    .photos-section-title {
+        font-size: 16px;
+    }
 }
 
 /* Загрузка */

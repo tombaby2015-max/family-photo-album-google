@@ -445,7 +445,7 @@
     height: 100%;
     background: rgba(0,0,0,0.95);
 }
-/* Фото занимает весь экран — кнопки фиксированные поверх фото */
+/* Фото занимает почти весь экран — небольшой отступ сверху под кнопки */
 .fullscreen-viewer__wrapper {
     position: absolute;
     top: 0;
@@ -455,7 +455,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 10px 80px;
+    padding: 70px 80px 20px;
     box-sizing: border-box;
 }
 .fullscreen-viewer__image-container {
@@ -533,12 +533,17 @@
     align-items: center;
 }
 
+/* Скрытие admin-only кнопок */
+.fv-action-btn--admin-only {
+    display: none !important;
+}
+
 /* Каждая кнопка — круглая, иконка + подпись */
 .fv-action-btn {
-    display: flex !important;
-    flex-direction: column !important;
-    align-items: center !important;
-    justify-content: center !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     gap: 3px;
     background: transparent;
     border: none;
@@ -748,7 +753,9 @@ html, body {
         display: none !important;
     }
     .fullscreen-viewer__wrapper {
-        padding: 10px;
+        top: 50px;
+        bottom: 70px;
+        padding: 0 10px;
     }
     /* На мобильных панель кнопок немного компактнее */
     .fullscreen-viewer__actions {
@@ -761,6 +768,9 @@ html, body {
     }
     .fv-action-btn span {
         font-size: 9px;
+    }
+    .fullscreen-viewer__wrapper {
+        padding: 65px 10px 10px;
     }
 
     .t-cover {

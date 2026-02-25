@@ -1,4 +1,4 @@
-// gallery.js — показывает папки и фото (Google Drive версия) 
+// gallery.js — показывает папки и фото (Google Drive версия)
 
 var BATCH_SIZE = 40;
 
@@ -261,6 +261,8 @@ var gallery = {
     },
 
     // === ЗАГРУЗКА ФОТО ===
+    sections: [], // секции текущей папки
+
     loadPhotos: function(folderId, offset) {
         var self = this;
         var container = document.getElementById('photos-container');
@@ -269,9 +271,17 @@ var gallery = {
             if (container) container.innerHTML = '<div class="loading">Загрузка фото...</div>';
             self.currentPhotos = [];
             self.visiblePhotos = [];
+            self.sections = [];
         }
 
-        api.getPhotosList(folderId).then(function(allPhotos) {
+        // Загружаем секции и фото параллельно
+        Promise.all([
+            api.getPhotosList(folderId),
+            api.getSections(folderId)
+        ]).then(function(results) {
+            var allPhotos = results[0];
+            var sections = results[1];
+            self.sections = sections;
             self.currentPhotos = allPhotos;
 
             var batch = allPhotos.slice(offset, offset + BATCH_SIZE);
@@ -304,6 +314,13 @@ var gallery = {
                 if (offset + BATCH_SIZE < allPhotos.length) {
                     self.showLoadMoreButton(folderId, offset + BATCH_SIZE, allPhotos);
                 }
+
+                // Инициализируем drag-and-drop для фото (только для админа)
+                if (api.isAdmin()) {
+                    setTimeout(function() {
+                        if (typeof admin !== 'undefined') admin.initPhotosSortable();
+                    }, 100);
+                }
             });
         }).catch(function() {
             if (offset === 0 && container) {
@@ -334,13 +351,116 @@ var gallery = {
         var grid = document.getElementById('photos-container');
         if (!grid) return;
 
-        var start = fromIndex || 0;
-        for (var i = start; i < self.visiblePhotos.length; i++) {
-            var item = self.createPhotoItem(self.visiblePhotos[i], i);
+        if (fromIndex === 0 || fromIndex === undefined) {
+            // Полный перерендер с секциями
+            grid.innerHTML = '';
+            self._renderWithSections(grid);
+        } else {
+            // Дозагрузка — добавляем только новые фото в конец (или в секции)
+            var start = fromIndex || 0;
+            for (var i = start; i < self.visiblePhotos.length; i++) {
+                var photo = self.visiblePhotos[i];
+                // Находим нужный grid-контейнер (секцию или основной)
+                var targetGrid = self._getGridForPhoto(photo, grid);
+                var item = self.createPhotoItem(photo, i);
+                var div = document.createElement('div');
+                div.innerHTML = item;
+                targetGrid.appendChild(div.firstChild);
+            }
+        }
+    },
+
+    // Получает grid-контейнер для фото (учитывая секции)
+    _getGridForPhoto: function(photo, fallbackGrid) {
+        if (photo.section_id) {
+            var sectionGrid = document.getElementById('section-grid-' + photo.section_id);
+            if (sectionGrid) return sectionGrid;
+        }
+        var unsectionedGrid = document.getElementById('unsectioned-grid');
+        return unsectionedGrid || fallbackGrid;
+    },
+
+    // Рендерит весь контейнер с секциями
+    _renderWithSections: function(container) {
+        var self = this;
+        var sections = self.sections || [];
+        var isAdmin = api.isAdmin();
+
+        // Разбиваем фото по секциям
+        var photosBySectionId = {};
+        var unsectioned = [];
+        for (var i = 0; i < self.visiblePhotos.length; i++) {
+            var photo = self.visiblePhotos[i];
+            if (photo.section_id) {
+                if (!photosBySectionId[photo.section_id]) photosBySectionId[photo.section_id] = [];
+                photosBySectionId[photo.section_id].push(photo);
+            } else {
+                unsectioned.push(photo);
+            }
+        }
+
+        // Несекционированные фото — сначала
+        var unsectionedWrap = document.createElement('div');
+        unsectionedWrap.className = 'photos-section-block photos-unsectioned';
+        unsectionedWrap.setAttribute('data-section-id', '');
+
+        var unsectionedGrid = document.createElement('div');
+        unsectionedGrid.id = 'unsectioned-grid';
+        unsectionedGrid.className = 'photos-grid photos-section-grid';
+        for (var j = 0; j < unsectioned.length; j++) {
+            var item = self.createPhotoItem(unsectioned[j], self.visiblePhotos.indexOf(unsectioned[j]));
+            var div = document.createElement('div');
+            div.innerHTML = item;
+            unsectionedGrid.appendChild(div.firstChild);
+        }
+        unsectionedWrap.appendChild(unsectionedGrid);
+        container.appendChild(unsectionedWrap);
+
+        // Секции
+        for (var k = 0; k < sections.length; k++) {
+            var section = sections[k];
+            var block = self._createSectionBlock(section, photosBySectionId[section.id] || [], isAdmin);
+            container.appendChild(block);
+        }
+    },
+
+    _createSectionBlock: function(section, photos, isAdmin) {
+        var self = this;
+        var block = document.createElement('div');
+        block.className = 'photos-section-block';
+        block.setAttribute('data-section-id', section.id);
+        block.id = 'section-block-' + section.id;
+
+        // Заголовок секции
+        var header = document.createElement('div');
+        header.className = 'photos-section-header';
+        header.innerHTML =
+            '<div class="photos-section-line"></div>' +
+            '<span class="photos-section-title" id="section-title-' + section.id + '">' + section.title + '</span>' +
+            '<div class="photos-section-line"></div>' +
+            (isAdmin ?
+                '<div class="photos-section-admin-actions">' +
+                '<button onclick="admin.renameSection(\'' + section.id + '\')" title="Переименовать">✏️</button>' +
+                '<button onclick="admin.deleteSection(\'' + section.id + '\')" title="Удалить секцию">🗑️</button>' +
+                '</div>'
+            : '');
+        block.appendChild(header);
+
+        // Сетка фото секции
+        var grid = document.createElement('div');
+        grid.id = 'section-grid-' + section.id;
+        grid.className = 'photos-grid photos-section-grid';
+        grid.setAttribute('data-section-id', section.id);
+
+        for (var i = 0; i < photos.length; i++) {
+            var idx = self.visiblePhotos.indexOf(photos[i]);
+            var item = self.createPhotoItem(photos[i], idx);
             var div = document.createElement('div');
             div.innerHTML = item;
             grid.appendChild(div.firstChild);
         }
+        block.appendChild(grid);
+        return block;
     },
 
     createPhotoItem: function(photo, index) {

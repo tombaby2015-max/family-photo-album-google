@@ -1,4 +1,4 @@
-// admin.js — панель администратора (Google Drive версия)
+// admin.js — панель администратора (Google Drive версия) 
 
 var admin = {
     inactivityTimer: null,

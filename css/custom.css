@@ -445,17 +445,17 @@
     height: 100%;
     background: rgba(0,0,0,0.95);
 }
-/* Фото занимает всё пространство между крестиком и кнопками */
+/* Фото занимает почти весь экран — небольшой отступ сверху под кнопки */
 .fullscreen-viewer__wrapper {
     position: absolute;
-    top: 50px;      /* отступ под крестик */
-    bottom: 60px;   /* отступ под кнопки */
+    top: 0;
+    bottom: 0;
     left: 0;
     right: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 0 80px;
+    padding: 70px 80px 20px;
     box-sizing: border-box;
 }
 .fullscreen-viewer__image-container {
@@ -478,21 +478,7 @@
     border-radius: 4px;
 }
 .fullscreen-viewer__close {
-    position: fixed;
-    top: 12px;
-    right: 20px;
-    background: none;
-    border: none;
-    color: #fff;
-    font-size: 36px;
-    cursor: pointer;
-    z-index: 10003;
-    line-height: 1;
-    opacity: 0.7;
-    transition: opacity 0.3s;
-}
-.fullscreen-viewer__close:hover {
-    opacity: 1;
+    display: none; /* крестик теперь в панели кнопок */
 }
 .fullscreen-viewer__nav {
     position: absolute;
@@ -531,61 +517,67 @@
 .fullscreen-viewer__next {
     right: 5px;
 }
-/* Кнопки внизу — фиксированные, всегда видны */
-.fullscreen-viewer__buttons {
+/* Панель кнопок — правый верхний угол как в Telegram */
+.fullscreen-viewer__actions {
     position: fixed;
-    bottom: 15px;
-    left: 50%;
-    transform: translateX(-50%);
+    top: 10px;
+    right: 10px;
     display: flex;
-    gap: 8px;
+    flex-direction: row;
+    gap: 4px;
     z-index: 10003;
-    background: rgba(0,0,0,0.7);
-    padding: 6px;
-    border-radius: 6px;
-    backdrop-filter: blur(5px);
+    background: rgba(0,0,0,0.55);
+    padding: 6px 8px;
+    border-radius: 10px;
+    backdrop-filter: blur(8px);
+    align-items: center;
 }
-.viewer-btn {
+
+/* Каждая кнопка — круглая, иконка + подпись */
+.fv-action-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
     background: transparent;
-    color: #ddd;
-    border: 1px solid rgba(255,255,255,0.3);
-    padding: 6px 14px;
-    border-radius: 4px;
+    border: none;
+    color: rgba(255,255,255,0.75);
     cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s;
-    white-space: nowrap;
-}
-.viewer-btn:hover {
-    background: rgba(255,255,255,0.1);
-    color: #fff;
-    border-color: rgba(255,255,255,0.5);
-}
-.viewer-btn.danger {
-    border-color: rgba(231, 76, 60, 0.4);
-    color: #faa;
-}
-.viewer-btn.danger:hover {
-    background: rgba(231, 76, 60, 0.2);
-    border-color: rgba(231, 76, 60, 0.6);
-}
-.fullscreen-viewer__download {
-    background: transparent;
-    color: #ddd;
-    border: 1px solid rgba(255,255,255,0.3);
-    padding: 6px 14px;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all 0.3s;
-    white-space: nowrap;
+    padding: 6px 8px;
+    border-radius: 8px;
+    transition: background 0.2s, color 0.2s;
     text-decoration: none;
-    display: inline-block;
+    min-width: 50px;
 }
-.fullscreen-viewer__download:hover {
-    background: rgba(255,255,255,0.1);
+.fv-action-btn:hover {
+    background: rgba(255,255,255,0.15);
     color: #fff;
-    border-color: rgba(255,255,255,0.5);
+}
+.fv-action-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 1.8;
+}
+.fv-action-btn span {
+    font-size: 10px;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+}
+.fv-action-btn--danger {
+    color: rgba(255,160,140,0.85);
+}
+.fv-action-btn--danger:hover {
+    background: rgba(231,76,60,0.2);
+    color: #ff8a7a;
+}
+
+/* Разделитель между группами кнопок */
+.fv-action-separator {
+    width: 1px;
+    height: 30px;
+    background: rgba(255,255,255,0.2);
+    margin: 0 2px;
 }
 
 /* Загрузка */
@@ -760,21 +752,20 @@ html, body {
         bottom: 70px;
         padding: 0 10px;
     }
-    .fullscreen-viewer__close {
-        top: 10px;
-        right: 15px;
-        font-size: 30px;
-        background: rgba(0,0,0,0.5);
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+    /* На мобильных панель кнопок немного компактнее */
+    .fullscreen-viewer__actions {
+        gap: 2px;
+        padding: 4px 6px;
     }
-    .fullscreen-viewer__buttons {
-        bottom: 15px;
-        padding: 8px;
+    .fv-action-btn {
+        min-width: 40px;
+        padding: 5px 6px;
+    }
+    .fv-action-btn span {
+        font-size: 9px;
+    }
+    .fullscreen-viewer__wrapper {
+        padding: 65px 10px 10px;
     }
 
     .t-cover {

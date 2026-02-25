@@ -1,4 +1,4 @@
-// gallery.js — показывает папки и фото (Google Drive версия)
+// gallery.js — показывает папки и фото (Google Drive версия) 
 
 var BATCH_SIZE = 40;
 

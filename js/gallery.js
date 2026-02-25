@@ -384,11 +384,6 @@ var gallery = {
         var link = document.getElementById('download-link');
         var viewer = document.getElementById('fullscreen-viewer');
 
-        var btnCover = document.getElementById('btn-set-cover');
-        var btnDelete = document.getElementById('btn-delete-photo');
-        if (btnCover) btnCover.style.display = api.isAdmin() ? 'inline-block' : 'none';
-        if (btnDelete) btnDelete.style.display = api.isAdmin() ? 'inline-block' : 'none';
-
         if (img) {
             img.src = photo.thumbUrl || '';
         }
@@ -401,8 +396,15 @@ var gallery = {
         // Сброс зума при открытии нового фото
         this._resetZoom();
 
-        // Инициализируем иконки Lucide
+        // Инициализируем иконки Lucide ДО установки видимости кнопок,
+        // чтобы Lucide не сбросил display:none на admin-кнопках
         if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        // Показываем admin-кнопки только после инициализации Lucide
+        var btnCover = document.getElementById('btn-set-cover');
+        var btnDelete = document.getElementById('btn-delete-photo');
+        if (btnCover) btnCover.style.display = api.isAdmin() ? 'flex' : 'none';
+        if (btnDelete) btnDelete.style.display = api.isAdmin() ? 'flex' : 'none';
 
         var self = this;
         if (this.keyHandler) document.removeEventListener('keydown', this.keyHandler);

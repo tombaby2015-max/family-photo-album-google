@@ -23,6 +23,9 @@
     <!-- SortableJS для перетаскивания папок -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+
     <!-- Tilda scripts -->
     <script src="https://static.tildacdn.ink/js/tilda-scripts-3.0.min.js" charset="utf-8" defer></script>
     <script src="https://static.tildacdn.ink/js/tilda-lazyload-1.0.min.js" charset="utf-8" async></script>
@@ -181,18 +184,41 @@
     <!-- ПОЛНОЭКРАННЫЙ ПРОСМОТР ФОТО -->
     <div id="fullscreen-viewer" class="fullscreen-viewer" style="display:none;">
         <div class="fullscreen-viewer__overlay" onclick="gallery.closeFullscreen()"></div>
-        <button class="fullscreen-viewer__close" onclick="gallery.closeFullscreen()">×</button>
+
+        <!-- Кнопки в правом верхнем углу -->
+        <div class="fullscreen-viewer__actions" id="fullscreen-actions">
+            <button class="fv-action-btn" id="btn-set-cover" onclick="admin.setFolderCover()" title="Превью папки" style="display:none;">
+                <i data-lucide="image"></i>
+                <span>Обложка</span>
+            </button>
+            <button class="fv-action-btn" id="btn-zoom-in" onclick="gallery.zoomIn()" title="Увеличить">
+                <i data-lucide="zoom-in"></i>
+                <span>Увеличить</span>
+            </button>
+            <button class="fv-action-btn" id="btn-zoom-out" onclick="gallery.zoomOut()" title="Уменьшить" style="opacity:0.35;">
+                <i data-lucide="zoom-out"></i>
+                <span>Уменьшить</span>
+            </button>
+            <a id="download-link" class="fv-action-btn" href="" download title="Скачать оригинал">
+                <i data-lucide="download"></i>
+                <span>Скачать</span>
+            </a>
+            <button class="fv-action-btn fv-action-btn--danger" id="btn-delete-photo" onclick="admin.deleteCurrentPhoto()" title="Удалить" style="display:none;">
+                <i data-lucide="trash-2"></i>
+                <span>Удалить</span>
+            </button>
+            <button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">
+                <i data-lucide="x"></i>
+                <span>Закрыть</span>
+            </button>
+        </div>
+
         <div class="fullscreen-viewer__wrapper">
             <button class="fullscreen-viewer__nav fullscreen-viewer__prev" onclick="gallery.prevPhoto()">‹</button>
             <div class="fullscreen-viewer__image-container">
                 <img id="fullscreen-image" src="" alt="">
             </div>
             <button class="fullscreen-viewer__nav fullscreen-viewer__next" onclick="gallery.nextPhoto()">›</button>
-        </div>
-        <div class="fullscreen-viewer__buttons" id="fullscreen-buttons">
-            <button class="viewer-btn" onclick="admin.setFolderCover()" id="btn-set-cover" style="display:none;">Превью папки</button>
-            <a id="download-link" class="fullscreen-viewer__download" href="" download>Скачать оригинал</a>
-            <button class="viewer-btn danger" onclick="admin.deleteCurrentPhoto()" id="btn-delete-photo" style="display:none;">Удалить</button>
         </div>
     </div>
 
@@ -204,8 +230,8 @@
     </div>
 
     <!-- Скрипты -->
-    <script src="js/api.js?v=2"></script>
-    <script src="js/gallery.js?v=2"></script>
-    <script src="js/admin.js?v=2"></script>
+    <script src="js/api.js?v=3"></script>
+    <script src="js/gallery.js?v=3"></script>
+    <script src="js/admin.js?v=3"></script>
 </body>
 </html>

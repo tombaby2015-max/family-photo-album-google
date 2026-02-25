@@ -395,22 +395,19 @@
 /* СЕКЦИИ ВНУТРИ ПАПКИ              */
 /* ================================ */
 
-/* Основной контейнер — просто вертикальный стек блоков */
+/* Основной контейнер */
 #photos-container {
     flex: 1;
     min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
 }
 
 .photos-section-block {
     width: 100%;
 }
 
-/* Блок "без секции" — скроллируемый */
+/* Блок "без секции" в режиме секций — скроллируемый */
 .photos-unsectioned-block .photos-section-grid {
-    max-height: 400px;
+    max-height: calc(var(--photo-thumb-size, 180px) * 1.5 + 20px);
     overflow-y: auto;
     padding-right: 4px;
 }
@@ -461,28 +458,28 @@
     border-color: #bbb;
 }
 
-/* Грид фото внутри секции — тоже скроллируемый */
+/* Грид фото внутри секции — скроллируемый, высота = 1.5 миниатюры */
 .photos-section-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
     gap: 20px;
-    max-height: 400px;
+    /* grid-auto-rows ОБЯЗАТЕЛЕН чтобы строки не схлопывались при overflow:auto */
+    grid-auto-rows: var(--photo-thumb-size, 180px);
+    max-height: calc(var(--photo-thumb-size, 180px) * 1.5 + 20px);
     overflow-y: auto;
-    min-height: 60px; /* чтобы можно было перетащить в пустую секцию */
+    min-height: 80px;
     padding-right: 4px;
+    padding-bottom: 4px;
 }
 
 /* Скроллбар — тонкий и ненавязчивый */
-.photos-section-grid::-webkit-scrollbar,
-.photos-unsectioned-block .photos-section-grid::-webkit-scrollbar {
+.photos-section-grid::-webkit-scrollbar {
     width: 4px;
 }
-.photos-section-grid::-webkit-scrollbar-track,
-.photos-unsectioned-block .photos-section-grid::-webkit-scrollbar-track {
+.photos-section-grid::-webkit-scrollbar-track {
     background: transparent;
 }
-.photos-section-grid::-webkit-scrollbar-thumb,
-.photos-unsectioned-block .photos-section-grid::-webkit-scrollbar-thumb {
+.photos-section-grid::-webkit-scrollbar-thumb {
     background: rgba(0,0,0,0.2);
     border-radius: 2px;
 }
@@ -1017,4 +1014,3 @@ html, body {
         font-size: 18px;
     }
 }
-

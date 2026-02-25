@@ -261,7 +261,7 @@ var gallery = {
     },
 
     // === ЗАГРУЗКА ФОТО ===
-    sections: [], // секции текущей папки
+    sections: [],
 
     loadPhotos: function(folderId, offset) {
         var self = this;
@@ -274,14 +274,12 @@ var gallery = {
             self.sections = [];
         }
 
-        // Загружаем секции и фото параллельно
         Promise.all([
             api.getPhotosList(folderId),
             api.getSections(folderId)
         ]).then(function(results) {
             var allPhotos = results[0];
-            var sections = results[1];
-            self.sections = sections;
+            self.sections = results[1] || [];
             self.currentPhotos = allPhotos;
 
             var batch = allPhotos.slice(offset, offset + BATCH_SIZE);
@@ -315,7 +313,6 @@ var gallery = {
                     self.showLoadMoreButton(folderId, offset + BATCH_SIZE, allPhotos);
                 }
 
-                // Инициализируем drag-and-drop для фото (только для админа)
                 if (api.isAdmin()) {
                     setTimeout(function() {
                         if (typeof admin !== 'undefined') admin.initPhotosSortable();
@@ -336,7 +333,7 @@ var gallery = {
 
         var div = document.createElement('div');
         div.id = 'load-more-container';
-        div.style.cssText = 'grid-column:1/-1;text-align:center;padding:20px;';
+        div.style.cssText = 'text-align:center;padding:20px;';
         div.innerHTML = '<button id="load-more-btn" style="padding:15px 30px;background:rgba(0,0,0,0.05);border:none;border-radius:8px;cursor:pointer;color:#666;font-size:16px;">+ Загрузить ещё фото</button>';
         container.appendChild(div);
 
@@ -348,78 +345,88 @@ var gallery = {
 
     renderPhotos: function(fromIndex) {
         var self = this;
-        var grid = document.getElementById('photos-container');
-        if (!grid) return;
+        var container = document.getElementById('photos-container');
+        if (!container) return;
 
-        if (fromIndex === 0 || fromIndex === undefined) {
-            // Полный перерендер с секциями
-            grid.innerHTML = '';
-            self._renderWithSections(grid);
+        // Полный перерендер при первой загрузке
+        if (!fromIndex || fromIndex === 0) {
+            container.innerHTML = '';
+            self._renderWithSections(container);
         } else {
-            // Дозагрузка — добавляем только новые фото в конец (или в секции)
-            var start = fromIndex || 0;
-            for (var i = start; i < self.visiblePhotos.length; i++) {
+            // Дозагрузка — добавляем новые фото в нужные грид-ы
+            for (var i = fromIndex; i < self.visiblePhotos.length; i++) {
                 var photo = self.visiblePhotos[i];
-                // Находим нужный grid-контейнер (секцию или основной)
-                var targetGrid = self._getGridForPhoto(photo, grid);
-                var item = self.createPhotoItem(photo, i);
-                var div = document.createElement('div');
-                div.innerHTML = item;
-                targetGrid.appendChild(div.firstChild);
+                var targetGrid = self._getPhotoGrid(photo);
+                if (targetGrid) {
+                    var item = self.createPhotoItem(photo, i);
+                    var div = document.createElement('div');
+                    div.innerHTML = item;
+                    targetGrid.appendChild(div.firstChild);
+                }
             }
+            self._updateUnsectionedVisibility();
         }
     },
 
-    // Получает grid-контейнер для фото (учитывая секции)
-    _getGridForPhoto: function(photo, fallbackGrid) {
+    _getPhotoGrid: function(photo) {
         if (photo.section_id) {
-            var sectionGrid = document.getElementById('section-grid-' + photo.section_id);
-            if (sectionGrid) return sectionGrid;
+            var g = document.getElementById('section-grid-' + photo.section_id);
+            if (g) return g;
         }
-        var unsectionedGrid = document.getElementById('unsectioned-grid');
-        return unsectionedGrid || fallbackGrid;
+        return document.getElementById('unsectioned-grid');
     },
 
-    // Рендерит весь контейнер с секциями
+    // Скрываем блок "без секции" если в нём нет фото
+    _updateUnsectionedVisibility: function() {
+        var wrap = document.getElementById('unsectioned-wrap');
+        var grid = document.getElementById('unsectioned-grid');
+        if (!wrap || !grid) return;
+        var hasPhotos = grid.querySelector('.photo-item') !== null;
+        wrap.style.display = hasPhotos ? '' : 'none';
+    },
+
     _renderWithSections: function(container) {
         var self = this;
         var sections = self.sections || [];
         var isAdmin = api.isAdmin();
 
         // Разбиваем фото по секциям
-        var photosBySectionId = {};
+        var bySection = {};
         var unsectioned = [];
         for (var i = 0; i < self.visiblePhotos.length; i++) {
-            var photo = self.visiblePhotos[i];
-            if (photo.section_id) {
-                if (!photosBySectionId[photo.section_id]) photosBySectionId[photo.section_id] = [];
-                photosBySectionId[photo.section_id].push(photo);
+            var p = self.visiblePhotos[i];
+            if (p.section_id) {
+                if (!bySection[p.section_id]) bySection[p.section_id] = [];
+                bySection[p.section_id].push(p);
             } else {
-                unsectioned.push(photo);
+                unsectioned.push(p);
             }
         }
 
-        // Несекционированные фото — сначала
+        // Блок "без секции" — скрываем если пустой
         var unsectionedWrap = document.createElement('div');
-        unsectionedWrap.className = 'photos-section-block photos-unsectioned';
-        unsectionedWrap.setAttribute('data-section-id', '');
+        unsectionedWrap.id = 'unsectioned-wrap';
+        unsectionedWrap.className = 'photos-section-block photos-unsectioned-block';
+        unsectionedWrap.style.display = unsectioned.length > 0 ? '' : 'none';
 
         var unsectionedGrid = document.createElement('div');
         unsectionedGrid.id = 'unsectioned-grid';
-        unsectionedGrid.className = 'photos-grid photos-section-grid';
+        unsectionedGrid.className = 'photos-section-grid';
+        unsectionedGrid.setAttribute('data-section-id', '');
+
         for (var j = 0; j < unsectioned.length; j++) {
+            var idx = j; // unsectioned — первые в массиве
             var item = self.createPhotoItem(unsectioned[j], self.visiblePhotos.indexOf(unsectioned[j]));
-            var div = document.createElement('div');
-            div.innerHTML = item;
-            unsectionedGrid.appendChild(div.firstChild);
+            var d = document.createElement('div');
+            d.innerHTML = item;
+            unsectionedGrid.appendChild(d.firstChild);
         }
         unsectionedWrap.appendChild(unsectionedGrid);
         container.appendChild(unsectionedWrap);
 
         // Секции
         for (var k = 0; k < sections.length; k++) {
-            var section = sections[k];
-            var block = self._createSectionBlock(section, photosBySectionId[section.id] || [], isAdmin);
+            var block = self._createSectionBlock(sections[k], bySection[sections[k].id] || [], isAdmin);
             container.appendChild(block);
         }
     },
@@ -428,33 +435,34 @@ var gallery = {
         var self = this;
         var block = document.createElement('div');
         block.className = 'photos-section-block';
-        block.setAttribute('data-section-id', section.id);
         block.id = 'section-block-' + section.id;
+        block.setAttribute('data-section-id', section.id);
 
-        // Заголовок секции
-        var header = document.createElement('div');
-        header.className = 'photos-section-header';
-        header.innerHTML =
+        // Заголовок
+        var headerHtml =
+            '<div class="photos-section-header">' +
             '<div class="photos-section-line"></div>' +
             '<span class="photos-section-title" id="section-title-' + section.id + '">' + section.title + '</span>' +
-            '<div class="photos-section-line"></div>' +
-            (isAdmin ?
+            '<div class="photos-section-line"></div>';
+        if (isAdmin) {
+            headerHtml +=
                 '<div class="photos-section-admin-actions">' +
                 '<button onclick="admin.renameSection(\'' + section.id + '\')" title="Переименовать">✏️</button>' +
-                '<button onclick="admin.deleteSection(\'' + section.id + '\')" title="Удалить секцию">🗑️</button>' +
-                '</div>'
-            : '');
-        block.appendChild(header);
+                '<button onclick="admin.deleteSection(\'' + section.id + '\')" title="Удалить">🗑️</button>' +
+                '</div>';
+        }
+        headerHtml += '</div>';
 
-        // Сетка фото секции
+        block.innerHTML = headerHtml;
+
+        // Грид с фото (со скроллом)
         var grid = document.createElement('div');
         grid.id = 'section-grid-' + section.id;
-        grid.className = 'photos-grid photos-section-grid';
+        grid.className = 'photos-section-grid';
         grid.setAttribute('data-section-id', section.id);
 
         for (var i = 0; i < photos.length; i++) {
-            var idx = self.visiblePhotos.indexOf(photos[i]);
-            var item = self.createPhotoItem(photos[i], idx);
+            var item = self.createPhotoItem(photos[i], self.visiblePhotos.indexOf(photos[i]));
             var div = document.createElement('div');
             div.innerHTML = item;
             grid.appendChild(div.firstChild);

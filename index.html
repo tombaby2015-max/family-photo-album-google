@@ -137,7 +137,10 @@
                     <button class="admin-btn" id="btn-enter-selection" onclick="admin.enterSelectionMode()" style="width:100%;margin-bottom:10px;">
                         Выбрать фото
                     </button>
-                    <button class="admin-btn" onclick="admin.addSection()" style="width:100%;margin-bottom:10px;">
+                    <button class="admin-btn" id="btn-enable-sections" onclick="admin.enableSectionMode()" style="width:100%;margin-bottom:10px;">
+                        📂 Разбить на секции
+                    </button>
+                    <button class="admin-btn" id="btn-add-section" onclick="admin.addSection()" style="width:100%;margin-bottom:10px;display:none;">
                         + Добавить секцию
                     </button>
                     <div id="selection-toolbar" style="display:none;flex-direction:column;gap:8px;">

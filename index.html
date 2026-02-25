@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html>
 <head>
@@ -187,23 +188,15 @@
 
         <!-- Кнопки в правом верхнем углу -->
         <div class="fullscreen-viewer__actions" id="fullscreen-actions">
-            <button class="fv-action-btn" id="btn-set-cover" onclick="admin.setFolderCover()" title="Превью папки" style="display:none;">
+            <button class="fv-action-btn fv-action-btn--admin-only" id="btn-set-cover" onclick="admin.setFolderCover()" title="Превью папки">
                 <i data-lucide="image"></i>
                 <span>Обложка</span>
-            </button>
-            <button class="fv-action-btn" id="btn-zoom-in" onclick="gallery.zoomIn()" title="Увеличить">
-                <i data-lucide="zoom-in"></i>
-                <span>Увеличить</span>
-            </button>
-            <button class="fv-action-btn" id="btn-zoom-out" onclick="gallery.zoomOut()" title="Уменьшить" style="opacity:0.35;">
-                <i data-lucide="zoom-out"></i>
-                <span>Уменьшить</span>
             </button>
             <a id="download-link" class="fv-action-btn" href="" download title="Скачать оригинал">
                 <i data-lucide="download"></i>
                 <span>Скачать</span>
             </a>
-            <button class="fv-action-btn fv-action-btn--danger" id="btn-delete-photo" onclick="admin.deleteCurrentPhoto()" title="Удалить" style="display:none;">
+            <button class="fv-action-btn fv-action-btn--danger fv-action-btn--admin-only" id="btn-delete-photo" onclick="admin.deleteCurrentPhoto()" title="Удалить">
                 <i data-lucide="trash-2"></i>
                 <span>Удалить</span>
             </button>

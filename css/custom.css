@@ -1,4 +1,4 @@
-/* Модальное окно входа */ 
+/* Модальное окно входа */
 .admin-modal {
     position: fixed;
     top: 0;
@@ -458,10 +458,6 @@
     padding: 10px 80px;
     box-sizing: border-box;
 }
-/* Скрытие admin-only кнопок для гостей */
-.fv-action-btn--admin-only {
-    display: none !important;
-}
 .fullscreen-viewer__image-container {
     position: relative;
     z-index: 1;
@@ -585,6 +581,11 @@
 .fv-action-btn--danger:hover {
     background: rgba(231,76,60,0.2);
     color: #ff8a7a;
+}
+
+/* Скрытие admin-only кнопок для гостей — ДОЛЖНО БЫТЬ ПОСЛЕ .fv-action-btn */
+.fv-action-btn--admin-only {
+    display: none !important;
 }
 
 /* Разделитель между группами кнопок */
@@ -912,4 +913,3 @@ html, body {
         font-size: 18px;
     }
 }
-

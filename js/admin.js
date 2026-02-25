@@ -119,15 +119,45 @@ var admin = {
         if (window.matchMedia('(max-width: 768px)').matches) return;
 
         var self = this;
+        var dragFromIndex = -1;
+
         new Sortable(container, {
             animation: 150,
             handle: '.folder-card',
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
-            onEnd: function() {
-                var items = container.querySelectorAll('li.folder-card');
+            onStart: function(evt) {
+                dragFromIndex = evt.oldIndex;
+            },
+            onEnd: function(evt) {
+                var fromIndex = dragFromIndex;
+                var toIndex = evt.newIndex;
+                if (fromIndex === toIndex) return;
+
+                // Swap в DOM — возвращаем SortableJS-сдвиг и делаем настоящий swap
+                var items = Array.from(container.querySelectorAll('li.folder-card'));
+
+                // SortableJS уже переместил элемент (insert), нам нужно поменять местами.
+                // items[toIndex] сейчас — это dragged элемент, items[fromIndex] — цель.
+                // Нам нужно поставить на место fromIndex то что было на toIndex до drag.
+                // Проще: получаем актуальный DOM, находим элемент в toIndex и
+                // вставляем его на место fromIndex.
+                var dragged = items[toIndex];
+                var target = items[fromIndex];
+
+                // Вставляем target туда где был dragged, и dragged туда где был target
+                if (fromIndex < toIndex) {
+                    container.insertBefore(target, dragged);
+                    container.insertBefore(dragged, target);
+                } else {
+                    container.insertBefore(dragged, target);
+                    container.insertBefore(target, dragged.nextSibling);
+                }
+
+                // Сохраняем новый порядок
+                var finalItems = container.querySelectorAll('li.folder-card');
                 var newOrder = [];
-                items.forEach(function(item, i) {
+                finalItems.forEach(function(item, i) {
                     var id = item.getAttribute('data-folder-id');
                     if (id) newOrder.push({ id: id, order: i + 1 });
                 });
@@ -271,6 +301,113 @@ var admin = {
             } else {
                 alert('Ошибка удаления');
             }
+        });
+    },
+
+    // === СЕКЦИИ ===
+    addSection: function() {
+        if (!gallery.currentFolder) return;
+        var title = prompt('Название секции (например: 2014):');
+        if (!title) return;
+
+        var folderId = gallery.currentFolder.id;
+        api.createSection(folderId, title).then(function(result) {
+            if (result && result.success) {
+                gallery.loadPhotos(folderId, 0);
+            } else {
+                alert('Ошибка создания секции');
+            }
+        });
+    },
+
+    renameSection: function(sectionId) {
+        if (!gallery.currentFolder) return;
+        var section = null;
+        for (var i = 0; i < gallery.sections.length; i++) {
+            if (gallery.sections[i].id === sectionId) { section = gallery.sections[i]; break; }
+        }
+        var current = section ? section.title : '';
+        var newTitle = prompt('Новое название:', current);
+        if (!newTitle || newTitle === current) return;
+
+        var folderId = gallery.currentFolder.id;
+        api.updateSection(folderId, sectionId, newTitle).then(function(result) {
+            if (result && result.success) {
+                var el = document.getElementById('section-title-' + sectionId);
+                if (el) el.textContent = newTitle;
+                if (section) section.title = newTitle;
+            } else {
+                alert('Ошибка переименования');
+            }
+        });
+    },
+
+    deleteSection: function(sectionId) {
+        if (!gallery.currentFolder) return;
+        if (!confirm('Удалить эту секцию?\nФото останутся в папке (без секции).')) return;
+
+        var folderId = gallery.currentFolder.id;
+        api.deleteSection(folderId, sectionId).then(function(result) {
+            if (result && result.success) {
+                gallery.loadPhotos(folderId, 0);
+            } else {
+                alert('Ошибка удаления секции');
+            }
+        });
+    },
+
+    // Drag-and-drop фото между секциями
+    _photoSortables: [],
+
+    initPhotosSortable: function() {
+        var self = this;
+        if (!api.isAdmin()) return;
+
+        // Уничтожаем старые инстансы
+        self._photoSortables.forEach(function(s) { try { s.destroy(); } catch(e) {} });
+        self._photoSortables = [];
+
+        // Инициализируем каждый grid-контейнер (включая unsectioned)
+        var grids = document.querySelectorAll('.photos-section-grid');
+        grids.forEach(function(grid) {
+            var sortable = new Sortable(grid, {
+                group: 'photos-' + (gallery.currentFolder ? gallery.currentFolder.id : 'x'),
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                dragClass: 'sortable-drag',
+                onEnd: function(evt) {
+                    var photoEl = evt.item;
+                    var photoId = photoEl.getAttribute('data-id');
+                    var targetGrid = evt.to;
+                    var targetSectionId = targetGrid.getAttribute('data-section-id') || '';
+                    var folderId = gallery.currentFolder ? gallery.currentFolder.id : null;
+                    if (!folderId || !photoId) return;
+
+                    // Обновляем section_id у фото в памяти
+                    for (var i = 0; i < gallery.visiblePhotos.length; i++) {
+                        if (gallery.visiblePhotos[i].id === photoId) {
+                            gallery.visiblePhotos[i].section_id = targetSectionId || undefined;
+                            break;
+                        }
+                    }
+
+                    // Сохраняем порядок всего grid-а куда попало фото
+                    var items = targetGrid.querySelectorAll('.photo-item');
+                    var orders = [];
+                    items.forEach(function(item, idx) {
+                        orders.push({
+                            id: item.getAttribute('data-id'),
+                            order: idx + 1,
+                            section_id: targetSectionId || null
+                        });
+                    });
+
+                    api.reorderPhotos(folderId, orders).catch(function() {
+                        alert('Ошибка сохранения порядка');
+                    });
+                }
+            });
+            self._photoSortables.push(sortable);
         });
     },
 

@@ -67,7 +67,6 @@ var admin = {
         if (sidebar) sidebar.style.display = 'none';
         this.isAdminActive = false;
 
-        // Выходим из режима секций при logout
         if (gallery.sectionModeActive) {
             gallery.sectionModeActive = false;
             var fp = document.getElementById('folder-page');
@@ -102,7 +101,7 @@ var admin = {
 
     // === СИНХРОНИЗАЦИЯ С GOOGLE DRIVE ===
     syncWithDrive: function(btn) {
-        if (!confirm('Синхронизировать с Google Drive?\n\nНовые папки и фото будут добавлены в альбом.')) return;
+        if (!confirm('Синхронизировать с Google Drive?\n\nНовые папки и фото будут добавлены. Удалённые из Drive — скрыты на сайте.')) return;
 
         var self = this;
         if (btn) { btn.textContent = '⏳ Синхронизация...'; btn.disabled = true; }
@@ -110,7 +109,11 @@ var admin = {
         api.sync().then(function(result) {
             if (btn) { btn.textContent = '🔄 Синхронизировать'; btn.disabled = false; }
             if (result.success) {
-                alert('✅ Готово!\nНовых папок: ' + result.syncedFolders + '\nНовых фото: ' + result.syncedPhotos);
+                var msg = '✅ Готово!\nНовых папок: ' + result.syncedFolders + '\nНовых фото: ' + result.syncedPhotos;
+                if (result.deletedFolders || result.deletedPhotos) {
+                    msg += '\nУдалено папок: ' + (result.deletedFolders || 0) + '\nУдалено фото: ' + (result.deletedPhotos || 0);
+                }
+                alert(msg);
                 gallery.loadFolders();
             } else {
                 alert('❌ Ошибка: ' + (result.error || 'Неизвестная ошибка'));
@@ -122,60 +125,79 @@ var admin = {
     },
 
     // === УПРАВЛЕНИЕ ПАПКАМИ ===
-    // SWAP: при drag&drop меняем именно две папки местами, не сдвигаем остальные
-    // sort: false — SortableJS вообще не трогает DOM, только сообщает откуда и куда
+    // ИСПРАВЛЕНИЕ #1: swap папок при drag&drop
+    // Используем elementFromPoint чтобы найти элемент под курсором в момент drop,
+    // так как SortableJS с sort:false не двигает DOM и evt.newIndex ненадёжен
     initSortable: function() {
         var container = document.getElementById('folders-container');
         if (!container || !api.isAdmin()) return;
         if (window.matchMedia('(max-width: 768px)').matches) return;
 
         var self = this;
-        var dragFromId = null;
+        var dragFromEl = null;
+        var lastPointerX = 0;
+        var lastPointerY = 0;
+
+        // Отслеживаем позицию мыши во время перетаскивания
+        document.addEventListener('mousemove', function(e) {
+            lastPointerX = e.clientX;
+            lastPointerY = e.clientY;
+        });
 
         new Sortable(container, {
             animation: 150,
             handle: '.folder-card',
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
-            sort: false,  // SortableJS не двигает DOM сам — мы делаем swap вручную
+            sort: false, // не двигаем DOM автоматически
             onStart: function(evt) {
-                dragFromId = evt.item.getAttribute('data-folder-id');
+                dragFromEl = evt.item;
             },
             onEnd: function(evt) {
-                // evt.item — перетащенный элемент, он остался на месте (sort:false)
-                // evt.originalEvent — координаты drop
-                // Находим элемент под курсором в момент drop
-                var draggedEl = evt.item;
-                var fromId = dragFromId;
-                dragFromId = null;
+                var draggedEl = dragFromEl;
+                dragFromEl = null;
 
-                // Получаем элемент который был под курсором при drop
-                // SortableJS с sort:false возвращает evt.newIndex как индекс ближайшего элемента
-                var items = Array.from(container.querySelectorAll('li.folder-card'));
-                var fromIndex = items.indexOf(draggedEl);
-                var toIndex = evt.newIndex;
+                if (!draggedEl) return;
 
-                if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
-                var targetEl = items[toIndex];
+                // Временно скрываем перетаскиваемый элемент чтобы elementFromPoint нашёл то что под ним
+                draggedEl.style.visibility = 'hidden';
+                var targetEl = document.elementFromPoint(lastPointerX, lastPointerY);
+                draggedEl.style.visibility = '';
+
                 if (!targetEl) return;
-                var toId = targetEl.getAttribute('data-folder-id');
+
+                // Ищем ближайшую папку-карточку
+                var targetCard = targetEl.closest
+                    ? targetEl.closest('.folder-card[data-folder-id]')
+                    : null;
+
+                // Если не нашли через closest — ищем вручную (IE fallback)
+                if (!targetCard) {
+                    var el = targetEl;
+                    while (el && el !== container) {
+                        if (el.classList && el.classList.contains('folder-card') && el.getAttribute('data-folder-id')) {
+                            targetCard = el;
+                            break;
+                        }
+                        el = el.parentElement;
+                    }
+                }
+
+                if (!targetCard || targetCard === draggedEl) return;
 
                 // Swap двух элементов в DOM
                 var draggedNext = draggedEl.nextSibling;
-                var targetNext = targetEl.nextSibling;
+                var targetNext = targetCard.nextSibling;
 
-                if (draggedNext === targetEl) {
-                    // dragged стоит прямо перед target
-                    container.insertBefore(targetEl, draggedEl);
+                if (draggedNext === targetCard) {
+                    container.insertBefore(targetCard, draggedEl);
                 } else if (targetNext === draggedEl) {
-                    // target стоит прямо перед dragged
-                    container.insertBefore(draggedEl, targetEl);
+                    container.insertBefore(draggedEl, targetCard);
                 } else {
-                    // Не соседи — меняем через временный маркер
                     var marker = document.createComment('swap');
                     container.insertBefore(marker, draggedEl);
                     container.insertBefore(draggedEl, targetNext);
-                    container.insertBefore(targetEl, marker);
+                    container.insertBefore(targetCard, marker);
                     container.removeChild(marker);
                 }
 
@@ -229,7 +251,9 @@ var admin = {
     // === ОБЛОЖКА ПАПКИ ===
     setFolderCover: function() {
         if (!gallery.currentFolder) return;
-        var photo = gallery.visiblePhotos[gallery.currentPhotoIndex];
+        var photoId = gallery._displayOrder ? gallery._displayOrder[gallery.currentPhotoIndex] : null;
+        if (!photoId) return;
+        var photo = gallery._photoById(photoId);
         if (!photo) return;
 
         var folderId = gallery.currentFolder.id;
@@ -294,6 +318,7 @@ var admin = {
                 var photoEl = document.querySelector('[data-id="' + photoId + '"]');
                 if (photoEl) photoEl.remove();
                 gallery.visiblePhotos = gallery.visiblePhotos.filter(function(p) { return p.id !== photoId; });
+                gallery._buildDisplayOrder();
             } else {
                 alert('Ошибка удаления');
             }
@@ -301,12 +326,12 @@ var admin = {
     },
 
     deleteCurrentPhoto: function() {
-        var photo = gallery.visiblePhotos[gallery.currentPhotoIndex];
-        if (!photo || !gallery.currentFolder) return;
+        if (!gallery._displayOrder || !gallery.currentFolder) return;
+        var photoId = gallery._displayOrder[gallery.currentPhotoIndex];
+        if (!photoId) return;
         if (!confirm('Удалить это фото из альбома?')) return;
 
         var folderId = gallery.currentFolder.id;
-        var photoId = photo.id;
 
         api.deletePhoto(folderId, photoId).then(function(result) {
             if (result && result.success) {
@@ -314,6 +339,7 @@ var admin = {
                 var photoEl = document.querySelector('[data-id="' + photoId + '"]');
                 if (photoEl) photoEl.remove();
                 gallery.visiblePhotos = gallery.visiblePhotos.filter(function(p) { return p.id !== photoId; });
+                gallery._buildDisplayOrder();
                 gallery._updateUnsectionedVisibility();
             } else {
                 alert('Ошибка удаления');
@@ -325,7 +351,6 @@ var admin = {
 
     enableSectionMode: function() {
         if (!gallery.currentFolder) return;
-        // Только десктоп
         if (window.matchMedia('(max-width: 768px)').matches) return;
 
         gallery.sectionModeActive = true;
@@ -353,11 +378,9 @@ var admin = {
         if (btnExit) btnExit.style.display = 'none';
         if (btnAdd) btnAdd.style.display = 'none';
 
-        // Уничтожаем sortable фото
         admin._photoSortables.forEach(function(s) { try { s.destroy(); } catch(e) {} });
         admin._photoSortables = [];
 
-        // Перерисовываем в обычном виде
         gallery.renderPhotos(0);
     },
 
@@ -369,7 +392,6 @@ var admin = {
         api.createSection(folderId, title.trim()).then(function(result) {
             if (result && result.success) {
                 gallery.loadPhotos(folderId, 0);
-                // Восстанавливаем режим секций после перезагрузки
                 setTimeout(function() {
                     if (!gallery.sectionModeActive && api.isAdmin()) {
                         admin.enableSectionMode();
@@ -427,7 +449,7 @@ var admin = {
         });
     },
 
-    // Drag-and-drop фото между секциями (и из/в верхний блок)
+    // Drag-and-drop фото между секциями
     _photoSortables: [],
 
     initPhotosSortable: function() {
@@ -437,7 +459,6 @@ var admin = {
         self._photoSortables.forEach(function(s) { try { s.destroy(); } catch(e) {} });
         self._photoSortables = [];
 
-        // Собираем ВСЕ сетки: и верхний блок (unsectioned), и сетки секций
         var grids = document.querySelectorAll('.photos-section-grid');
         var groupName = 'photos-' + (gallery.currentFolder ? gallery.currentFolder.id : 'x');
 
@@ -445,8 +466,8 @@ var admin = {
             var sortable = new Sortable(grid, {
                 group: {
                     name: groupName,
-                    pull: true,   // можно брать из любой сетки
-                    put: true     // можно класть в любую сетку
+                    pull: true,
+                    put: true
                 },
                 animation: 150,
                 ghostClass: 'sortable-ghost',
@@ -455,12 +476,10 @@ var admin = {
                     var photoId = evt.item.getAttribute('data-id');
                     var targetGrid = evt.to;
                     var targetSectionId = targetGrid.getAttribute('data-section-id') || null;
-                    // Пустая строка означает "без секции" — приравниваем к null
                     if (targetSectionId === '') targetSectionId = null;
                     var folderId = gallery.currentFolder ? gallery.currentFolder.id : null;
                     if (!folderId || !photoId) return;
 
-                    // Обновляем section_id в памяти
                     for (var i = 0; i < gallery.visiblePhotos.length; i++) {
                         if (gallery.visiblePhotos[i].id === photoId) {
                             if (targetSectionId) gallery.visiblePhotos[i].section_id = targetSectionId;
@@ -469,10 +488,8 @@ var admin = {
                         }
                     }
 
-                    // Скрываем/показываем блок нераспределённых
                     gallery._updateUnsectionedVisibility();
 
-                    // Сохраняем новый порядок и секцию
                     var items = targetGrid.querySelectorAll('.photo-item');
                     var orders = [];
                     items.forEach(function(item, idx) {
@@ -610,6 +627,7 @@ var admin = {
                 gallery.visiblePhotos = gallery.visiblePhotos.filter(function(p) { return p.id !== photoId; });
                 done++;
                 if (done === toDelete.length) {
+                    gallery._buildDisplayOrder();
                     self.exitSelectionMode();
                     alert('✅ Удалено: ' + toDelete.length + ' фото');
                 }

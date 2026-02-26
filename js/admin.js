@@ -132,7 +132,13 @@ var admin = {
 
         var self = this;
 
-        new Sortable(container, {
+        // Уничтожаем предыдущий инстанс если есть
+        if (self._folderSortable) {
+            try { self._folderSortable.destroy(); } catch(e) {}
+            self._folderSortable = null;
+        }
+
+        self._folderSortable = new Sortable(container, {
             animation: 150,
             handle: '.folder-card',
             ghostClass: 'sortable-ghost',
@@ -148,14 +154,14 @@ var admin = {
                 gallery.folders[i] = gallery.folders[j];
                 gallery.folders[j] = tmp;
 
-                // Перерисовываем DOM из данных
-                gallery.renderFolders();
-
                 // Сохраняем на сервере
                 var newOrder = gallery.folders.map(function(folder, idx) {
                     return { id: folder.id, order: idx + 1 };
                 });
                 self.saveFoldersOrder(newOrder);
+
+                // Перерисовываем DOM после того как SortableJS завершил анимацию
+                setTimeout(function() { gallery.renderFolders(); }, 0);
             }
         });
     },

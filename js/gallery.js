@@ -630,15 +630,22 @@ var gallery = {
         var link = document.getElementById('download-link');
         if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
 
-        // Кнопки "Обложка" и "Удалить" — только для админа, гости не видят
-        var btnCover = document.getElementById('btn-set-cover');
-        var btnDelete = document.getElementById('btn-delete-photo');
-        if (api.isAdmin()) {
-            if (btnCover) btnCover.style.display = '';
-            if (btnDelete) btnDelete.style.display = '';
-        } else {
-            if (btnCover) btnCover.style.display = 'none';
-            if (btnDelete) btnDelete.style.display = 'none';
+        // Кнопки "Обложка" и "Удалить" — только для админа.
+        // Пересоздаём панель действий чтобы гарантированно не показывать их гостям.
+        var actionsPanel = document.getElementById('fullscreen-actions');
+        if (actionsPanel) {
+            var isAdmin = api.isAdmin();
+            actionsPanel.innerHTML =
+                (isAdmin ?
+                    '<button class="fv-action-btn" id="btn-set-cover" onclick="admin.setFolderCover()" title="Превью папки">' +
+                    '<i data-lucide="image"></i><span>Обложка</span></button>' : '') +
+                '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + (photo.name || 'photo.jpg') + '" title="Скачать оригинал">' +
+                '<i data-lucide="download"></i><span>Скачать</span></a>' +
+                (isAdmin ?
+                    '<button class="fv-action-btn fv-action-btn--danger" id="btn-delete-photo" onclick="admin.deleteCurrentPhoto()" title="Удалить">' +
+                    '<i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
+                '<button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">' +
+                '<i data-lucide="x"></i><span>Закрыть</span></button>';
         }
 
         if (viewer) viewer.style.display = 'flex';

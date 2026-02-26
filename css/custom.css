@@ -163,8 +163,6 @@
     background-position: center;
     background-repeat: no-repeat;
 }
-
-/* ПУНКТ 3: название и счётчик крупнее */
 .folder-card__title {
     position: absolute;
     bottom: 0;
@@ -181,8 +179,6 @@
     font-weight: 400;
     opacity: 0.85;
 }
-
-/* ПУНКТ 2: в режиме редактирования прячем название и счётчик */
 .folder-card.editing .folder-card__title {
     display: none;
 }
@@ -265,8 +261,6 @@
     top: 50%;
     transform: translateY(-50%);
 }
-
-/* ПУНКТ 2: кнопки − Сохранить + строго симметрично */
 .preview-editor__btn.save {
     bottom: 8px;
     left: 50%;
@@ -383,7 +377,11 @@
     padding: 6px 10px;
 }
 
-/* Сетка фото — обычный режим */
+/* ================================================== */
+/* ОБЫЧНЫЙ РЕЖИМ — единая прокручиваемая страница     */
+/* ================================================== */
+
+/* Основная сетка фото */
 .photos-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -391,76 +389,9 @@
     flex: 1;
 }
 
-/* ================================================== */
-/* РЕЖИМ СЕКЦИЙ — класс .section-mode на #folder-page */
-/* Только десктоп, только админ                       */
-/* ================================================== */
-
-/* folder-content в режиме секций — фиксированная высота */
-#folder-page.section-mode .folder-content {
-    height: calc(100vh - 160px);
-    overflow: hidden;
-    align-items: stretch;
-    padding-bottom: 0;
-}
-
-/* photos-container в режиме секций — два блока вертикально */
-#folder-page.section-mode #photos-container {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-    overflow: hidden;
-}
-
-/* Верхний блок — несортированные фото (~42% высоты) */
-.section-mode-top {
-    flex: 0 0 42%;
-    overflow-y: auto;
-    overflow-x: hidden;
-    border-bottom: 2px solid #e0e0e0;
-    padding-bottom: 10px;
-    padding-right: 4px;
-}
-
-/* Нижний блок — секции (остаток) */
-.section-mode-bottom {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
-    padding-right: 4px;
-}
-
-/* Сетки внутри блоков */
-.section-mode-top .photos-grid,
-.section-mode-top .photos-section-grid,
-.section-mode-bottom .photos-section-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-    min-height: 60px;
-}
-
-/* Скроллбары — тонкие */
-.section-mode-top::-webkit-scrollbar,
-.section-mode-bottom::-webkit-scrollbar { width: 4px; }
-.section-mode-top::-webkit-scrollbar-track,
-.section-mode-bottom::-webkit-scrollbar-track { background: transparent; }
-.section-mode-top::-webkit-scrollbar-thumb,
-.section-mode-bottom::-webkit-scrollbar-thumb {
-    background: rgba(0,0,0,0.18);
-    border-radius: 2px;
-}
-
-/* Подпись блока */
-.section-block-label {
-    font-size: 11px;
-    font-weight: 600;
-    color: #aaa;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 10px 0;
-    border-bottom: 1px solid #eee;
-    margin-bottom: 14px;
+/* Секции в обычном режиме — просто блок под сеткой */
+.photos-section-block {
+    width: 100%;
 }
 
 /* Заголовки секций */
@@ -468,7 +399,7 @@
     display: flex;
     align-items: center;
     gap: 15px;
-    margin: 20px 0 14px;
+    margin: 30px 0 16px;
 }
 .photos-section-line {
     flex: 1;
@@ -504,13 +435,90 @@
     border-color: #bbb;
 }
 
+/* ================================================== */
+/* РЕЖИМ СЕКЦИЙ — класс .section-mode на #folder-page */
+/* Только десктоп, только админ                       */
+/* ================================================== */
+
+/* folder-content в режиме секций — фиксированная высота */
+#folder-page.section-mode .folder-content {
+    height: calc(100vh - 160px);
+    overflow: hidden;
+    align-items: stretch;
+    padding-bottom: 0;
+}
+
+/* photos-container в режиме секций — два блока вертикально */
+#folder-page.section-mode #photos-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    flex: 1;
+}
+
+/* Верхний блок — нераспределённые фото (~42% высоты) */
+.section-mode-top {
+    flex: 0 0 42%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 10px;
+    padding-right: 4px;
+}
+
+/* Нижний блок — секции (остаток) */
+.section-mode-bottom {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+}
+
+/* Сетки внутри режима секций */
+.photos-section-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    min-height: 60px;
+}
+
 /* Drop-зона при перетаскивании */
-.section-mode-top .photos-grid.sortable-over,
-.section-mode-bottom .photos-section-grid.sortable-over {
+.photos-section-grid.sortable-over {
     outline: 2px dashed rgba(52,152,219,0.5);
     background: rgba(52,152,219,0.03);
     border-radius: 4px;
 }
+
+/* Скроллбары — тонкие */
+.section-mode-top::-webkit-scrollbar,
+.section-mode-bottom::-webkit-scrollbar { width: 4px; }
+.section-mode-top::-webkit-scrollbar-track,
+.section-mode-bottom::-webkit-scrollbar-track { background: transparent; }
+.section-mode-top::-webkit-scrollbar-thumb,
+.section-mode-bottom::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.18);
+    border-radius: 2px;
+}
+
+/* Подпись блока */
+.section-block-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 14px;
+}
+
+/* В режиме секций заголовки секций чуть компактнее */
+#folder-page.section-mode .photos-section-header {
+    margin: 16px 0 12px;
+}
+
+/* ================================================== */
 
 .photo-item {
     aspect-ratio: 1;
@@ -546,7 +554,7 @@
     font-size: 11px;
 }
 
-/* ПУНКТ 1: Fullscreen — как в Telegram, поверх всего от края до края */
+/* Fullscreen — как в Telegram, поверх всего от края до края */
 .fullscreen-viewer {
     position: fixed;
     top: 0;
@@ -567,7 +575,6 @@
     height: 100%;
     background: rgba(0,0,0,0.95);
 }
-/* Фото занимает весь экран — кнопки фиксированные поверх */
 .fullscreen-viewer__wrapper {
     position: absolute;
     top: 0;
@@ -580,10 +587,6 @@
     padding: 10px 80px;
     box-sizing: border-box;
 }
-/* Скрытие admin-only кнопок для гостей */
-.fv-action-btn--admin-only {
-    display: none !important;
-}
 .fullscreen-viewer__image-container {
     position: relative;
     z-index: 1;
@@ -595,7 +598,6 @@
     touch-action: pan-y;
     overflow: hidden;
 }
-/* Оба img-элемента абсолютные, анимируются вместе */
 .fullscreen-viewer__image-container img {
     position: absolute;
     max-width: 100%;
@@ -614,8 +616,9 @@
 .fv-img-out-right{ transform: translateX(40%);   opacity: 0; }
 .fv-img-in-left  { transform: translateX(40%);   opacity: 0; transition: none !important; }
 .fv-img-in-right { transform: translateX(-40%);  opacity: 0; transition: none !important; }
+
 .fullscreen-viewer__close {
-    display: none; /* крестик теперь в панели кнопок */
+    display: none;
 }
 .fullscreen-viewer__nav {
     position: absolute;
@@ -648,13 +651,10 @@
 .fullscreen-viewer__nav:hover {
     color: #fff;
 }
-.fullscreen-viewer__prev {
-    left: 5px;
-}
-.fullscreen-viewer__next {
-    right: 5px;
-}
-/* Панель кнопок — правый верхний угол как в Telegram */
+.fullscreen-viewer__prev { left: 5px; }
+.fullscreen-viewer__next { right: 5px; }
+
+/* Панель кнопок — правый верхний угол */
 .fullscreen-viewer__actions {
     position: fixed;
     top: 10px;
@@ -670,7 +670,6 @@
     align-items: stretch;
 }
 
-/* Каждая кнопка — иконка сверху, подпись снизу */
 .fv-action-btn {
     display: flex !important;
     flex-direction: column !important;
@@ -709,7 +708,6 @@
     color: #ff8a7a;
 }
 
-/* Разделитель между группами кнопок */
 .fv-action-separator {
     width: 1px;
     height: 30px;
@@ -879,6 +877,13 @@ html, body {
         font-size: 11px;
     }
 
+    /* Режим секций на мобильных ОТКЛЮЧЁН */
+    #btn-enable-sections,
+    #btn-exit-sections,
+    #btn-add-section {
+        display: none !important;
+    }
+
     /* Fullscreen на мобильных */
     .fullscreen-viewer__prev,
     .fullscreen-viewer__next {
@@ -889,7 +894,6 @@ html, body {
         bottom: 70px;
         padding: 0 10px;
     }
-    /* На мобильных панель кнопок немного компактнее */
     .fullscreen-viewer__actions {
         gap: 2px;
         padding: 4px 6px;
@@ -900,9 +904,6 @@ html, body {
     }
     .fv-action-btn span {
         font-size: 9px;
-    }
-    .fullscreen-viewer__wrapper {
-        padding: 10px;
     }
 
     .t-cover {

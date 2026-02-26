@@ -66,11 +66,13 @@ var admin = {
         if (panel) panel.style.display = 'none';
         if (sidebar) sidebar.style.display = 'none';
         this.isAdminActive = false;
-        // Выходим из режима секций при выходе из админки
+
+        // Выходим из режима секций при logout
         if (gallery.sectionModeActive) {
             gallery.sectionModeActive = false;
             var fp = document.getElementById('folder-page');
             if (fp) fp.classList.remove('section-mode');
+            gallery._resetSectionModeButtons();
             gallery.renderPhotos(0);
         }
     },
@@ -120,6 +122,7 @@ var admin = {
     },
 
     // === УПРАВЛЕНИЕ ПАПКАМИ ===
+    // SWAP: при drag&drop меняем именно две папки местами, не сдвигаем остальные
     initSortable: function() {
         var container = document.getElementById('folders-container');
         if (!container || !api.isAdmin()) return;
@@ -140,22 +143,18 @@ var admin = {
                 var toIndex = evt.newIndex;
                 if (dragFromIndex === toIndex) return;
 
-                // SortableJS делает insert — нам нужен swap.
-                // Получаем текущий DOM после insert и возвращаем истинный swap.
+                // SortableJS делает insert, нам нужен swap двух элементов.
+                // После insert: dragged уже на toIndex.
+                // Элемент-цель теперь на: fromIndex < toIndex => toIndex-1, иначе toIndex+1
                 var items = Array.from(container.querySelectorAll('li.folder-card'));
-                // items[toIndex] — это перетащенный элемент (уже вставленный SortableJS)
-                // нам нужно найти элемент который был на toIndex до перетаскивания.
-                // После insert: элемент на fromIndex "исчез", всё сдвинулось.
-                // Элемент-цель сейчас находится на:
-                //   fromIndex < toIndex => toIndex - 1
-                //   fromIndex > toIndex => toIndex + 1
                 var targetIndex = dragFromIndex < toIndex ? toIndex - 1 : toIndex + 1;
+
                 var dragged = items[toIndex];
                 var target = items[targetIndex];
 
                 if (!dragged || !target) return;
 
-                // Делаем настоящий swap в DOM
+                // Swap в DOM
                 var draggedNext = dragged.nextSibling;
                 var targetNext = target.nextSibling;
 
@@ -231,7 +230,6 @@ var admin = {
                         break;
                     }
                 }
-                // Без alert — просто тихо обновляем
                 gallery.loadFolders();
             } else {
                 alert('Ошибка установки обложки');
@@ -240,13 +238,10 @@ var admin = {
     },
 
     // === УПРАВЛЕНИЕ ФОТО ===
-
-    // FIX #5: читаем актуальное состояние из DOM, не передаём параметром
     togglePhotoHidden: function(photoId) {
         if (!gallery.currentFolder) return;
         var folderId = gallery.currentFolder.id;
 
-        // Берём текущее состояние из data-атрибута элемента
         var photoEl = document.querySelector('[data-id="' + photoId + '"]');
         if (!photoEl) return;
 
@@ -255,21 +250,16 @@ var admin = {
 
         api.updatePhoto(folderId, photoId, { hidden: newHidden }).then(function(result) {
             if (result && result.success) {
-                // Обновляем data-атрибут
                 photoEl.setAttribute('data-hidden', newHidden ? '1' : '0');
-
-                // Обновляем внешний вид
                 if (newHidden) photoEl.classList.add('hidden-photo');
                 else photoEl.classList.remove('hidden-photo');
 
-                // Обновляем кнопку
                 var btn = photoEl.querySelector('.photo-item__admin-actions button');
                 if (btn) {
                     btn.title = newHidden ? 'Показать' : 'Скрыть';
                     btn.textContent = newHidden ? '👁' : '🙈';
                 }
 
-                // Обновляем в массиве
                 for (var i = 0; i < gallery.visiblePhotos.length; i++) {
                     if (gallery.visiblePhotos[i].id === photoId) {
                         gallery.visiblePhotos[i].hidden = newHidden;
@@ -319,11 +309,11 @@ var admin = {
         });
     },
 
-    // === РЕЖИМ СЕКЦИЙ ===
+    // === РЕЖИМ СЕКЦИЙ (только десктоп, только админ) ===
 
     enableSectionMode: function() {
         if (!gallery.currentFolder) return;
-        // Только desktop
+        // Только десктоп
         if (window.matchMedia('(max-width: 768px)').matches) return;
 
         gallery.sectionModeActive = true;
@@ -336,7 +326,6 @@ var admin = {
         if (btnExit) btnExit.style.display = 'block';
         if (btnAdd) btnAdd.style.display = 'block';
 
-        // Перерисовываем в режиме секций
         gallery.renderPhotos(0);
         setTimeout(function() { admin.initPhotosSortable(); }, 150);
     },
@@ -352,12 +341,12 @@ var admin = {
         if (btnExit) btnExit.style.display = 'none';
         if (btnAdd) btnAdd.style.display = 'none';
 
-        // Перерисовываем обычным способом
-        gallery.renderPhotos(0);
-
         // Уничтожаем sortable фото
         admin._photoSortables.forEach(function(s) { try { s.destroy(); } catch(e) {} });
         admin._photoSortables = [];
+
+        // Перерисовываем в обычном виде
+        gallery.renderPhotos(0);
     },
 
     addSection: function() {
@@ -368,6 +357,14 @@ var admin = {
         api.createSection(folderId, title.trim()).then(function(result) {
             if (result && result.success) {
                 gallery.loadPhotos(folderId, 0);
+                // Восстанавливаем режим секций после перезагрузки
+                setTimeout(function() {
+                    if (!gallery.sectionModeActive && api.isAdmin()) {
+                        admin.enableSectionMode();
+                    } else if (gallery.sectionModeActive) {
+                        setTimeout(function() { admin.initPhotosSortable(); }, 100);
+                    }
+                }, 500);
             } else {
                 alert('Ошибка создания секции');
             }
@@ -400,16 +397,25 @@ var admin = {
         if (!gallery.currentFolder) return;
         if (!confirm('Удалить эту секцию?\nФото останутся в папке (без секции).')) return;
         var folderId = gallery.currentFolder.id;
+        var wasSectionMode = gallery.sectionModeActive;
         api.deleteSection(folderId, sectionId).then(function(result) {
             if (result && result.success) {
                 gallery.loadPhotos(folderId, 0);
+                if (wasSectionMode) {
+                    setTimeout(function() {
+                        gallery.sectionModeActive = true;
+                        document.getElementById('folder-page').classList.add('section-mode');
+                        gallery.renderPhotos(0);
+                        setTimeout(function() { admin.initPhotosSortable(); }, 150);
+                    }, 400);
+                }
             } else {
                 alert('Ошибка удаления секции');
             }
         });
     },
 
-    // Drag-and-drop фото между секциями
+    // Drag-and-drop фото между секциями (и из/в верхний блок)
     _photoSortables: [],
 
     initPhotosSortable: function() {
@@ -419,12 +425,17 @@ var admin = {
         self._photoSortables.forEach(function(s) { try { s.destroy(); } catch(e) {} });
         self._photoSortables = [];
 
+        // Собираем ВСЕ сетки: и верхний блок (unsectioned), и сетки секций
         var grids = document.querySelectorAll('.photos-section-grid');
         var groupName = 'photos-' + (gallery.currentFolder ? gallery.currentFolder.id : 'x');
 
         grids.forEach(function(grid) {
             var sortable = new Sortable(grid, {
-                group: groupName,
+                group: {
+                    name: groupName,
+                    pull: true,   // можно брать из любой сетки
+                    put: true     // можно класть в любую сетку
+                },
                 animation: 150,
                 ghostClass: 'sortable-ghost',
                 dragClass: 'sortable-drag',
@@ -432,6 +443,8 @@ var admin = {
                     var photoId = evt.item.getAttribute('data-id');
                     var targetGrid = evt.to;
                     var targetSectionId = targetGrid.getAttribute('data-section-id') || null;
+                    // Пустая строка означает "без секции" — приравниваем к null
+                    if (targetSectionId === '') targetSectionId = null;
                     var folderId = gallery.currentFolder ? gallery.currentFolder.id : null;
                     if (!folderId || !photoId) return;
 
@@ -444,7 +457,7 @@ var admin = {
                         }
                     }
 
-                    // Скрываем/показываем unsectioned-блок
+                    // Скрываем/показываем блок нераспределённых
                     gallery._updateUnsectionedVisibility();
 
                     // Сохраняем новый порядок и секцию
@@ -463,6 +476,8 @@ var admin = {
             self._photoSortables.push(sortable);
         });
     },
+
+    // === РЕЖИМ ВЫБОРА ФОТО ===
     enterSelectionMode: function() {
         this.isSelectionMode = true;
         this.selectedPhotos = [];
@@ -470,7 +485,6 @@ var admin = {
         document.getElementById('btn-enter-selection').style.display = 'none';
         document.getElementById('selection-toolbar').style.display = 'flex';
 
-        // FIX #6: сбрасываем кнопку при входе
         var btnAll = document.getElementById('btn-select-all');
         if (btnAll) btnAll.textContent = 'Выбрать все';
 
@@ -484,7 +498,6 @@ var admin = {
         this.updateSelectionButtons();
     },
 
-    // FIX #6: полный сброс состояния при выходе
     exitSelectionMode: function() {
         this.isSelectionMode = false;
         this.selectedPhotos = [];
@@ -494,7 +507,6 @@ var admin = {
         if (btnEnter) btnEnter.style.display = 'block';
         if (toolbar) toolbar.style.display = 'none';
 
-        // Сбрасываем текст кнопки
         var btnAll = document.getElementById('btn-select-all');
         if (btnAll) btnAll.textContent = 'Выбрать все';
 
@@ -502,7 +514,6 @@ var admin = {
         this.updateSelectionButtons();
     },
 
-    // FIX #6: корректная логика Выбрать все / Снять выбор
     toggleSelectAll: function() {
         var self = this;
         var photos = document.querySelectorAll('.photo-item');
@@ -541,7 +552,6 @@ var admin = {
             cbEl.innerHTML = '';
         }
 
-        // Обновляем текст кнопки "Выбрать все"
         var photos = document.querySelectorAll('.photo-item');
         var btn = document.getElementById('btn-select-all');
         if (btn) {
@@ -623,16 +633,16 @@ var admin = {
         });
     },
 
-    // === БЭКАП #8: скачиваем файл И сохраняем в Google Drive ===
+    // === БЭКАП ===
     manualBackup: function() {
-    api.createBackup().then(function(result) {
-        if (result.success) {
-            alert('✅ Бэкап скачан на компьютер!');
-        } else {
-            alert('❌ Ошибка бэкапа');
-        }
-    });
-},
+        api.createBackup().then(function(result) {
+            if (result.success) {
+                alert('✅ Бэкап скачан на компьютер!');
+            } else {
+                alert('❌ Ошибка бэкапа');
+            }
+        });
+    },
 
     restoreFromBackup: function() {
         var input = document.getElementById('restore-backup-file');

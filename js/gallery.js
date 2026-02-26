@@ -229,7 +229,6 @@ var gallery = {
         this.currentFolder = folder;
         this.currentPhotos = [];
         this.visiblePhotos = [];
-        // Всегда начинаем в обычном виде — режим секций не включается автоматически
         this.sectionModeActive = false;
 
         document.getElementById('main-page').style.display = 'none';
@@ -251,7 +250,6 @@ var gallery = {
             sidebarBtns.style.display = api.isAdmin() ? 'flex' : 'none';
         }
 
-        // Сброс кнопок режима секций в исходное состояние
         this._resetSectionModeButtons();
 
         window.scrollTo(0, 0);
@@ -323,7 +321,6 @@ var gallery = {
                     self.showLoadMoreButton(folderId, offset + BATCH_SIZE, allPhotos);
                 }
 
-                // Если режим секций активен — инициализируем сортировку
                 if (api.isAdmin() && self.sectionModeActive) {
                     setTimeout(function() {
                         if (typeof admin !== 'undefined') admin.initPhotosSortable();
@@ -355,7 +352,6 @@ var gallery = {
     },
 
     // === РЕНДЕР ФОТО ===
-    // Единый метод — решает что показывать в зависимости от режима
     renderPhotos: function(fromIndex) {
         var self = this;
         var container = document.getElementById('photos-container');
@@ -365,15 +361,11 @@ var gallery = {
             container.innerHTML = '';
 
             if (self.sectionModeActive && api.isAdmin()) {
-                // РЕЖИМ СЕКЦИЙ: два блока (только десктоп, только админ)
                 self._renderSectionMode(container);
             } else {
-                // ОБЫЧНЫЙ РЕЖИМ: единая прокручиваемая страница
-                // Нераспределённые фото сверху, затем секции с разделителями
                 self._renderNormalMode(container);
             }
         } else {
-            // Дозагрузка фото
             for (var k = fromIndex; k < self.visiblePhotos.length; k++) {
                 var photo = self.visiblePhotos[k];
                 var targetGrid = self._getPhotoGrid(photo);
@@ -385,14 +377,44 @@ var gallery = {
                 }
             }
         }
+
+        // ИСПРАВЛЕНИЕ #2: после рендера обновляем _orderedPhotoIds
+        // чтобы порядок листания соответствовал визуальному порядку на странице
+        self._buildDisplayOrder();
     },
 
-    // ОБЫЧНЫЙ РЕЖИМ (и гостевой, и админ без режима секций)
+    // Строим массив id в том порядке, в котором фото реально отображаются на странице.
+    // Это нужно для корректного листания в fullscreen.
+    _buildDisplayOrder: function() {
+        var self = this;
+        self._displayOrder = [];
+
+        var items = document.querySelectorAll('#photos-container .photo-item');
+        items.forEach(function(el) {
+            var id = el.getAttribute('data-id');
+            if (id) self._displayOrder.push(id);
+        });
+    },
+
+    // Возвращает индекс фото в _displayOrder по его id
+    _displayIndexById: function(photoId) {
+        if (!this._displayOrder) return -1;
+        return this._displayOrder.indexOf(photoId);
+    },
+
+    // Возвращает объект фото по его id из visiblePhotos
+    _photoById: function(photoId) {
+        for (var i = 0; i < this.visiblePhotos.length; i++) {
+            if (this.visiblePhotos[i].id === photoId) return this.visiblePhotos[i];
+        }
+        return null;
+    },
+
+    // ОБЫЧНЫЙ РЕЖИМ
     _renderNormalMode: function(container) {
         var self = this;
         var sections = self.sections || [];
 
-        // Разбиваем фото по секциям
         var bySection = {};
         var unsectioned = [];
         for (var i = 0; i < self.visiblePhotos.length; i++) {
@@ -405,7 +427,6 @@ var gallery = {
             }
         }
 
-        // Нераспределённые фото — сверху сеткой
         if (unsectioned.length > 0) {
             var grid = document.createElement('div');
             grid.id = 'unsectioned-grid';
@@ -420,7 +441,6 @@ var gallery = {
             container.appendChild(grid);
         }
 
-        // Секции с разделителями
         for (var k = 0; k < sections.length; k++) {
             var section = sections[k];
             var sectionPhotos = bySection[section.id] || [];
@@ -429,14 +449,12 @@ var gallery = {
             sectionBlock.className = 'photos-section-block';
             sectionBlock.id = 'section-block-' + section.id;
 
-            // Разделитель с названием
             var headerHtml =
                 '<div class="photos-section-header">' +
                 '<div class="photos-section-line"></div>' +
                 '<span class="photos-section-title" id="section-title-' + section.id + '">' + section.title + '</span>' +
                 '<div class="photos-section-line"></div>';
 
-            // Кнопки редактирования секции — только для админа
             if (api.isAdmin()) {
                 headerHtml +=
                     '<div class="photos-section-admin-actions">' +
@@ -464,12 +482,11 @@ var gallery = {
         }
     },
 
-    // РЕЖИМ СЕКЦИЙ: два блока с независимым скроллом (только десктоп, только админ)
+    // РЕЖИМ СЕКЦИЙ (только десктоп, только админ)
     _renderSectionMode: function(container) {
         var self = this;
         var sections = self.sections || [];
 
-        // Разбиваем фото по секциям
         var bySection = {};
         var unsectioned = [];
         for (var i = 0; i < self.visiblePhotos.length; i++) {
@@ -482,7 +499,6 @@ var gallery = {
             }
         }
 
-        // --- ВЕРХНИЙ БЛОК: нераспределённые фото ---
         var topBlock = document.createElement('div');
         topBlock.id = 'unsectioned-wrap';
         topBlock.className = 'section-mode-top';
@@ -506,7 +522,6 @@ var gallery = {
         topBlock.appendChild(topGrid);
         container.appendChild(topBlock);
 
-        // --- НИЖНИЙ БЛОК: секции ---
         var bottomBlock = document.createElement('div');
         bottomBlock.id = 'sections-wrap';
         bottomBlock.className = 'section-mode-bottom';
@@ -547,7 +562,6 @@ var gallery = {
             bottomBlock.appendChild(sectionEl);
         }
 
-        // Если секций нет — показываем подсказку
         if (sections.length === 0) {
             var hint = document.createElement('div');
             hint.style.cssText = 'padding:30px;text-align:center;color:#aaa;font-size:14px;';
@@ -571,6 +585,8 @@ var gallery = {
         var grid = document.getElementById('unsectioned-grid');
         if (!wrap || !grid) return;
         wrap.style.display = grid.querySelector('.photo-item') !== null ? '' : 'none';
+        // Пересчитываем порядок отображения после изменения
+        this._buildDisplayOrder();
     },
 
     createPhotoItem: function(photo, index) {
@@ -586,30 +602,43 @@ var gallery = {
                 '</div>';
         }
 
-        return '<div class="photo-item ' + hiddenClass + '" data-id="' + photo.id + '" data-hidden="' + (photo.hidden ? '1' : '0') + '" data-index="' + index + '" onclick="gallery.handlePhotoClick(event, ' + index + ', \'' + photo.id + '\')">' +
+        return '<div class="photo-item ' + hiddenClass + '" data-id="' + photo.id + '" data-hidden="' + (photo.hidden ? '1' : '0') + '" data-index="' + index + '" onclick="gallery.handlePhotoClick(event, \'' + photo.id + '\')">' +
             '<img src="' + (photo.thumbUrl || '') + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">' +
             adminActions +
         '</div>';
     },
 
-    handlePhotoClick: function(e, index, photoId) {
+    // ИСПРАВЛЕНИЕ #2: handlePhotoClick теперь принимает photoId, а не числовой index.
+    // Мы ищем позицию в _displayOrder (визуальный порядок), а не в visiblePhotos.
+    handlePhotoClick: function(e, photoId) {
         if (typeof admin !== 'undefined' && admin.isSelectionMode) {
             e.stopPropagation();
             var checkbox = e.currentTarget.querySelector('.photo-checkbox-custom');
             if (checkbox) admin.togglePhotoSelection(photoId, checkbox);
             return;
         }
-        this.openFullscreen(index);
+        var displayIndex = this._displayIndexById(photoId);
+        if (displayIndex === -1) {
+            // Fallback: ищем в visiblePhotos
+            for (var i = 0; i < this.visiblePhotos.length; i++) {
+                if (this.visiblePhotos[i].id === photoId) { displayIndex = i; break; }
+            }
+        }
+        this.openFullscreen(displayIndex);
     },
 
     // === FULLSCREEN ПРОСМОТР ===
     _animating: false,
+    _displayOrder: [], // id фото в визуальном порядке (заполняется в _buildDisplayOrder)
 
-    openFullscreen: function(index) {
-        if (index < 0 || index >= this.visiblePhotos.length) return;
+    openFullscreen: function(displayIndex) {
+        if (!this._displayOrder || displayIndex < 0 || displayIndex >= this._displayOrder.length) return;
 
-        this.currentPhotoIndex = index;
-        var photo = this.visiblePhotos[index];
+        this.currentPhotoIndex = displayIndex;
+        var photoId = this._displayOrder[displayIndex];
+        var photo = this._photoById(photoId);
+        if (!photo) return;
+
         var viewer = document.getElementById('fullscreen-viewer');
         var container = document.querySelector('.fullscreen-viewer__image-container');
 
@@ -630,8 +659,6 @@ var gallery = {
         var link = document.getElementById('download-link');
         if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
 
-        // Кнопки "Обложка" и "Удалить" — только для админа.
-        // Пересоздаём панель действий чтобы гарантированно не показывать их гостям.
         var actionsPanel = document.getElementById('fullscreen-actions');
         if (actionsPanel) {
             var isAdmin = api.isAdmin();
@@ -664,30 +691,46 @@ var gallery = {
         this.initSwipe();
     },
 
-    _changePhoto: function(newIndex, direction) {
+    // ИСПРАВЛЕНИЕ #4: правильная логика направления анимации.
+    // direction='left'  → пользователь нажал "вперёд" (→): текущее фото уходит ВЛЕВО,  новое приходит СПРАВА
+    // direction='right' → пользователь нажал "назад"  (←): текущее фото уходит ВПРАВО, новое приходит СЛЕВА
+    _changePhoto: function(newDisplayIndex, direction) {
         if (this._animating) return;
-        if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
+        if (!this._displayOrder || newDisplayIndex < 0 || newDisplayIndex >= this._displayOrder.length) return;
 
         var self = this;
-        var photo = this.visiblePhotos[newIndex];
+        var photoId = this._displayOrder[newDisplayIndex];
+        var photo = this._photoById(photoId);
+        if (!photo) return;
 
         var imgA = document.getElementById('fv-img-a');
         var imgB = document.getElementById('fv-img-b');
-        if (!imgA || !imgB) { self.openFullscreen(newIndex); return; }
+        if (!imgA || !imgB) { self.openFullscreen(newDisplayIndex); return; }
 
         this._animating = true;
-        this.currentPhotoIndex = newIndex;
+        this.currentPhotoIndex = newDisplayIndex;
 
         imgB.src = photo.thumbUrl || '';
-        imgB.className = direction === 'left' ? 'fv-img-in-left' : 'fv-img-in-right';
 
         var link = document.getElementById('download-link');
         if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
 
+        // direction='left' (→ вперёд): A уходит влево, B приходит справа
+        // direction='right' (← назад): A уходит вправо, B приходит слева
+        if (direction === 'left') {
+            imgB.className = 'fv-img-in-right';  // B стартует справа (за экраном)
+        } else {
+            imgB.className = 'fv-img-in-left';   // B стартует слева (за экраном)
+        }
+
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
-                imgA.className = direction === 'left' ? 'fv-img-out-left' : 'fv-img-out-right';
-                imgB.className = 'fv-img-current';
+                if (direction === 'left') {
+                    imgA.className = 'fv-img-out-left';  // A уходит влево
+                } else {
+                    imgA.className = 'fv-img-out-right'; // A уходит вправо
+                }
+                imgB.className = 'fv-img-current';       // B едет в центр
 
                 setTimeout(function() {
                     imgA.src = imgB.src;
@@ -723,6 +766,8 @@ var gallery = {
             var dx = e.changedTouches[0].screenX - startX;
             var dy = e.changedTouches[0].screenY - startY;
             if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+                // ИСПРАВЛЕНИЕ #4: свайп влево → следующее фото (direction='left')
+                // свайп вправо → предыдущее фото (direction='right')
                 if (dx < 0) self._changePhoto(self.currentPhotoIndex + 1, 'left');
                 else self._changePhoto(self.currentPhotoIndex - 1, 'right');
             }
@@ -740,11 +785,13 @@ var gallery = {
     },
 
     prevPhoto: function() {
-        if (this.currentPhotoIndex > 0) this._changePhoto(this.currentPhotoIndex - 1, 'right');
+        if (this.currentPhotoIndex > 0)
+            this._changePhoto(this.currentPhotoIndex - 1, 'right');
     },
 
     nextPhoto: function() {
-        if (this.currentPhotoIndex < this.visiblePhotos.length - 1) this._changePhoto(this.currentPhotoIndex + 1, 'left');
+        if (this._displayOrder && this.currentPhotoIndex < this._displayOrder.length - 1)
+            this._changePhoto(this.currentPhotoIndex + 1, 'left');
     },
 
     showMainPage: function() {
@@ -752,7 +799,6 @@ var gallery = {
             admin.exitSelectionMode();
         }
 
-        // Выходим из режима секций
         if (this.sectionModeActive) {
             this.sectionModeActive = false;
             var fp = document.getElementById('folder-page');

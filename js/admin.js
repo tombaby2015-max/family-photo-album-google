@@ -123,48 +123,60 @@ var admin = {
 
     // === УПРАВЛЕНИЕ ПАПКАМИ ===
     // SWAP: при drag&drop меняем именно две папки местами, не сдвигаем остальные
+    // sort: false — SortableJS вообще не трогает DOM, только сообщает откуда и куда
     initSortable: function() {
         var container = document.getElementById('folders-container');
         if (!container || !api.isAdmin()) return;
         if (window.matchMedia('(max-width: 768px)').matches) return;
 
         var self = this;
-        var dragFromIndex = -1;
+        var dragFromId = null;
 
         new Sortable(container, {
             animation: 150,
             handle: '.folder-card',
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
+            sort: false,  // SortableJS не двигает DOM сам — мы делаем swap вручную
             onStart: function(evt) {
-                dragFromIndex = evt.oldIndex;
+                dragFromId = evt.item.getAttribute('data-folder-id');
             },
             onEnd: function(evt) {
-                var toIndex = evt.newIndex;
-                if (dragFromIndex === toIndex) return;
+                // evt.item — перетащенный элемент, он остался на месте (sort:false)
+                // evt.originalEvent — координаты drop
+                // Находим элемент под курсором в момент drop
+                var draggedEl = evt.item;
+                var fromId = dragFromId;
+                dragFromId = null;
 
-                // SortableJS делает insert, нам нужен swap двух элементов.
-                // После insert: dragged уже на toIndex.
-                // Элемент-цель теперь на: fromIndex < toIndex => toIndex-1, иначе toIndex+1
+                // Получаем элемент который был под курсором при drop
+                // SortableJS с sort:false возвращает evt.newIndex как индекс ближайшего элемента
                 var items = Array.from(container.querySelectorAll('li.folder-card'));
-                var targetIndex = dragFromIndex < toIndex ? toIndex - 1 : toIndex + 1;
+                var fromIndex = items.indexOf(draggedEl);
+                var toIndex = evt.newIndex;
 
-                var dragged = items[toIndex];
-                var target = items[targetIndex];
+                if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+                var targetEl = items[toIndex];
+                if (!targetEl) return;
+                var toId = targetEl.getAttribute('data-folder-id');
 
-                if (!dragged || !target) return;
+                // Swap двух элементов в DOM
+                var draggedNext = draggedEl.nextSibling;
+                var targetNext = targetEl.nextSibling;
 
-                // Swap в DOM
-                var draggedNext = dragged.nextSibling;
-                var targetNext = target.nextSibling;
-
-                if (draggedNext === target) {
-                    container.insertBefore(target, dragged);
-                } else if (targetNext === dragged) {
-                    container.insertBefore(dragged, target);
+                if (draggedNext === targetEl) {
+                    // dragged стоит прямо перед target
+                    container.insertBefore(targetEl, draggedEl);
+                } else if (targetNext === draggedEl) {
+                    // target стоит прямо перед dragged
+                    container.insertBefore(draggedEl, targetEl);
                 } else {
-                    container.insertBefore(target, draggedNext);
-                    container.insertBefore(dragged, targetNext);
+                    // Не соседи — меняем через временный маркер
+                    var marker = document.createComment('swap');
+                    container.insertBefore(marker, draggedEl);
+                    container.insertBefore(draggedEl, targetNext);
+                    container.insertBefore(targetEl, marker);
+                    container.removeChild(marker);
                 }
 
                 // Сохраняем итоговый порядок

@@ -718,19 +718,19 @@ var gallery = {
         // direction='left' (→ вперёд): A уходит влево, B приходит справа
         // direction='right' (← назад): A уходит вправо, B приходит слева
         if (direction === 'left') {
-            imgB.className = 'fv-img-in-right';  // B стартует справа (за экраном)
+            imgB.className = 'fv-img-enter-from-right';  // B стартует справа (за экраном), без анимации
         } else {
-            imgB.className = 'fv-img-in-left';   // B стартует слева (за экраном)
+            imgB.className = 'fv-img-enter-from-left';   // B стартует слева (за экраном), без анимации
         }
 
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
                 if (direction === 'left') {
-                    imgA.className = 'fv-img-out-left';  // A уходит влево
+                    imgA.className = 'fv-img-exit-left';   // A уходит влево
                 } else {
-                    imgA.className = 'fv-img-out-right'; // A уходит вправо
+                    imgA.className = 'fv-img-exit-right';  // A уходит вправо
                 }
-                imgB.className = 'fv-img-current';       // B едет в центр
+                imgB.className = 'fv-img-current';         // B едет в центр
 
                 setTimeout(function() {
                     imgA.src = imgB.src;

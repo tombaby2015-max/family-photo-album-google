@@ -995,6 +995,11 @@ html, body {
     transform: none !important;
     box-shadow: none !important;
 }
+.sortable-swap-highlight {
+    transform: translateY(-4px) scale(1.025) !important;
+    box-shadow: 0 14px 35px rgba(0, 0, 0, 0.18) !important;
+    z-index: 5;
+}
 #folders-container {
     overflow: visible;
 }

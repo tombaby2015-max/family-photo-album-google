@@ -191,27 +191,13 @@
     </div>
 
     <!-- ПОЛНОЭКРАННЫЙ ПРОСМОТР ФОТО -->
+    <!-- Кнопки "Обложка" и "Удалить" создаются динамически в gallery.js — только для админа -->
     <div id="fullscreen-viewer" class="fullscreen-viewer" style="display:none;">
         <div class="fullscreen-viewer__overlay" onclick="gallery.closeFullscreen()"></div>
 
-        <!-- Кнопки в правом верхнем углу -->
+        <!-- Панель кнопок — заполняется через JS в зависимости от роли -->
         <div class="fullscreen-viewer__actions" id="fullscreen-actions">
-            <button class="fv-action-btn fv-action-btn--admin-only" id="btn-set-cover" onclick="admin.setFolderCover()" title="Превью папки">
-                <i data-lucide="image"></i>
-                <span>Обложка</span>
-            </button>
-            <a id="download-link" class="fv-action-btn" href="" download title="Скачать оригинал">
-                <i data-lucide="download"></i>
-                <span>Скачать</span>
-            </a>
-            <button class="fv-action-btn fv-action-btn--danger fv-action-btn--admin-only" id="btn-delete-photo" onclick="admin.deleteCurrentPhoto()" title="Удалить">
-                <i data-lucide="trash-2"></i>
-                <span>Удалить</span>
-            </button>
-            <button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">
-                <i data-lucide="x"></i>
-                <span>Закрыть</span>
-            </button>
+            <!-- Содержимое создаётся динамически в gallery.openFullscreen() -->
         </div>
 
         <div class="fullscreen-viewer__wrapper">
@@ -232,7 +218,7 @@
 
     <!-- Скрипты -->
     <script src="js/api.js?v=3"></script>
-    <script src="js/gallery.js?v=3"></script>
-    <script src="js/admin.js?v=3"></script>
+    <script src="js/gallery.js?v=4"></script>
+    <script src="js/admin.js?v=4"></script>
 </body>
 </html>

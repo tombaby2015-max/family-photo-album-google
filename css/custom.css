@@ -440,16 +440,14 @@
 /* Только десктоп, только админ                       */
 /* ================================================== */
 
-/* folder-content в режиме секций — фиксированная высота */
 #folder-page.section-mode .folder-content {
     height: calc(100vh - 160px);
     overflow: hidden;
     align-items: stretch;
     padding-bottom: 0;
-    padding-right: 20px; /* немного уменьшаем правый отступ чтобы дать блокам больше места */
+    padding-right: 20px;
 }
 
-/* photos-container в режиме секций — два блока вертикально */
 #folder-page.section-mode #photos-container {
     display: flex;
     flex-direction: column;
@@ -459,23 +457,20 @@
     min-width: 0;
 }
 
-/* Верхний блок — нераспределённые фото (~42% высоты) */
 .section-mode-top {
     flex: 0 0 42%;
-    overflow-y: scroll; /* всегда резервируем место под скроллбар — одинаковая ширина с нижним */
+    overflow-y: scroll;
     overflow-x: hidden;
     border-bottom: 2px solid #e0e0e0;
     padding-bottom: 10px;
 }
 
-/* Нижний блок — секции (остаток) */
 .section-mode-bottom {
     flex: 1;
-    overflow-y: scroll; /* всегда резервируем место под скроллбар */
+    overflow-y: scroll;
     overflow-x: hidden;
 }
 
-/* Сетки внутри режима секций — 5 колонок вместо 4, чтобы использовать доступное пространство */
 .photos-section-grid {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -483,14 +478,12 @@
     min-height: 60px;
 }
 
-/* Drop-зона при перетаскивании */
 .photos-section-grid.sortable-over {
     outline: 2px dashed rgba(52,152,219,0.5);
     background: rgba(52,152,219,0.03);
     border-radius: 4px;
 }
 
-/* Скроллбары — тонкие */
 .section-mode-top::-webkit-scrollbar,
 .section-mode-bottom::-webkit-scrollbar { width: 4px; }
 .section-mode-top::-webkit-scrollbar-track,
@@ -501,7 +494,6 @@
     border-radius: 2px;
 }
 
-/* Подпись блока */
 .section-block-label {
     font-size: 11px;
     font-weight: 600;
@@ -513,7 +505,6 @@
     margin-bottom: 14px;
 }
 
-/* В режиме секций заголовки секций чуть компактнее */
 #folder-page.section-mode .photos-section-header {
     margin: 16px 0 12px;
 }
@@ -554,7 +545,9 @@
     font-size: 11px;
 }
 
-/* Fullscreen — как в Telegram, поверх всего от края до края */
+/* ================================================== */
+/* FULLSCREEN ПРОСМОТР                                */
+/* ================================================== */
 .fullscreen-viewer {
     position: fixed;
     top: 0;
@@ -610,12 +603,50 @@
     transition: transform 0.32s cubic-bezier(.4,0,.2,1), opacity 0.32s ease;
     will-change: transform, opacity;
 }
-/* Состояния анимации */
-.fv-img-current  { transform: translateX(0);    opacity: 1; }
-.fv-img-out-left { transform: translateX(-40%);  opacity: 0; }
-.fv-img-out-right{ transform: translateX(40%);   opacity: 0; }
-.fv-img-in-left  { transform: translateX(40%);   opacity: 0; transition: none !important; }
-.fv-img-in-right { transform: translateX(-40%);  opacity: 0; transition: none !important; }
+
+/* ================================================== */
+/* АНИМАЦИЯ ПЕРЕЛИСТЫВАНИЯ                            */
+/*                                                    */
+/* Логика: "листаем вперёд (→)"                       */
+/*   текущее фото уходит ВЛЕВО  (translateX -40%)     */
+/*   новое фото приходит СПРАВА (translateX +40% → 0) */
+/*                                                    */
+/* Логика: "листаем назад (←)"                        */
+/*   текущее фото уходит ВПРАВО (translateX +40%)     */
+/*   новое фото приходит СЛЕВА  (translateX -40% → 0) */
+/* ================================================== */
+
+/* Текущее фото — в центре, видимое */
+.fv-img-current {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+/* Уходящее фото влево (листаем вперёд →) */
+.fv-img-exit-left {
+    transform: translateX(-40%);
+    opacity: 0;
+}
+
+/* Уходящее фото вправо (листаем назад ←) */
+.fv-img-exit-right {
+    transform: translateX(40%);
+    opacity: 0;
+}
+
+/* Входящее фото справа — стартовая позиция (листаем вперёд →), transition: none чтобы мгновенно встать */
+.fv-img-enter-from-right {
+    transform: translateX(40%);
+    opacity: 0;
+    transition: none !important;
+}
+
+/* Входящее фото слева — стартовая позиция (листаем назад ←), transition: none чтобы мгновенно встать */
+.fv-img-enter-from-left {
+    transform: translateX(-40%);
+    opacity: 0;
+    transition: none !important;
+}
 
 .fullscreen-viewer__close {
     display: none;

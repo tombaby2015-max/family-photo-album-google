@@ -383,7 +383,7 @@
     padding: 6px 10px;
 }
 
-/* Сетка фото */
+/* Сетка фото — обычный режим */
 .photos-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -391,43 +391,92 @@
     flex: 1;
 }
 
-/* ================================ */
-/* СЕКЦИИ ВНУТРИ ПАПКИ              */
-/* ================================ */
+/* ================================================== */
+/* РЕЖИМ СЕКЦИЙ — класс .section-mode на #folder-page */
+/* Только десктоп, только админ                       */
+/* ================================================== */
 
-/* Основной контейнер */
-#photos-container {
-    flex: 1;
-    min-width: 0;
+/* folder-content в режиме секций — фиксированная высота */
+#folder-page.section-mode .folder-content {
+    height: calc(100vh - 160px);
+    overflow: hidden;
+    align-items: stretch;
+    padding-bottom: 0;
 }
 
-.photos-section-block {
-    width: 100%;
+/* photos-container в режиме секций — два блока вертикально */
+#folder-page.section-mode #photos-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
 }
 
-/* Блок "без секции" в режиме секций — скроллируемый */
-.photos-unsectioned-block .photos-section-grid {
-    max-height: calc(var(--photo-thumb-size, 180px) * 1.5 + 20px);
+/* Верхний блок — несортированные фото (~42% высоты) */
+.section-mode-top {
+    flex: 0 0 42%;
     overflow-y: auto;
+    overflow-x: hidden;
+    border-bottom: 2px solid #e0e0e0;
+    padding-bottom: 10px;
     padding-right: 4px;
 }
 
-/* Заголовок секции */
+/* Нижний блок — секции (остаток) */
+.section-mode-bottom {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 4px;
+}
+
+/* Сетки внутри блоков */
+.section-mode-top .photos-grid,
+.section-mode-top .photos-section-grid,
+.section-mode-bottom .photos-section-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    min-height: 60px;
+}
+
+/* Скроллбары — тонкие */
+.section-mode-top::-webkit-scrollbar,
+.section-mode-bottom::-webkit-scrollbar { width: 4px; }
+.section-mode-top::-webkit-scrollbar-track,
+.section-mode-bottom::-webkit-scrollbar-track { background: transparent; }
+.section-mode-top::-webkit-scrollbar-thumb,
+.section-mode-bottom::-webkit-scrollbar-thumb {
+    background: rgba(0,0,0,0.18);
+    border-radius: 2px;
+}
+
+/* Подпись блока */
+.section-block-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #aaa;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 14px;
+}
+
+/* Заголовки секций */
 .photos-section-header {
     display: flex;
     align-items: center;
     gap: 15px;
-    margin: 28px 0 16px;
+    margin: 20px 0 14px;
 }
-
 .photos-section-line {
     flex: 1;
     height: 1px;
     background: #ddd;
 }
-
 .photos-section-title {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: 700;
     color: #333;
     white-space: nowrap;
@@ -435,13 +484,11 @@
     font-family: 'TildaSans', Arial, sans-serif;
     flex-shrink: 0;
 }
-
 .photos-section-admin-actions {
     display: flex;
     gap: 4px;
     flex-shrink: 0;
 }
-
 .photos-section-admin-actions button {
     background: none;
     border: 1px solid #ddd;
@@ -452,44 +499,19 @@
     transition: background 0.2s;
     line-height: 1.4;
 }
-
 .photos-section-admin-actions button:hover {
     background: #f0f0f0;
     border-color: #bbb;
 }
 
-/* Грид фото внутри секции — скроллируемый, высота = 1.5 миниатюры */
-.photos-section-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    /* grid-auto-rows ОБЯЗАТЕЛЕН чтобы строки не схлопывались при overflow:auto */
-    grid-auto-rows: var(--photo-thumb-size, 180px);
-    max-height: calc(var(--photo-thumb-size, 180px) * 1.5 + 20px);
-    overflow-y: auto;
-    min-height: 80px;
-    padding-right: 4px;
-    padding-bottom: 4px;
-}
-
-/* Скроллбар — тонкий и ненавязчивый */
-.photos-section-grid::-webkit-scrollbar {
-    width: 4px;
-}
-.photos-section-grid::-webkit-scrollbar-track {
-    background: transparent;
-}
-.photos-section-grid::-webkit-scrollbar-thumb {
-    background: rgba(0,0,0,0.2);
-    border-radius: 2px;
-}
-
-/* Подсветка зоны drop при перетаскивании */
-.photos-section-grid.sortable-over {
+/* Drop-зона при перетаскивании */
+.section-mode-top .photos-grid.sortable-over,
+.section-mode-bottom .photos-section-grid.sortable-over {
     outline: 2px dashed rgba(52,152,219,0.5);
     background: rgba(52,152,219,0.03);
     border-radius: 4px;
 }
+
 .photo-item {
     aspect-ratio: 1;
     background: #eee;
@@ -798,8 +820,7 @@ html, body {
 /* ==================== */
 
 @media (max-width: 1200px) {
-    .photos-grid,
-    .photos-section-grid {
+    .photos-grid {
         grid-template-columns: repeat(3, 1fr);
     }
     .folder-title-bar h2 {
@@ -824,8 +845,7 @@ html, body {
     .folder-sidebar {
         width: 100%;
     }
-    .photos-grid,
-    .photos-section-grid {
+    .photos-grid {
         grid-template-columns: repeat(2, 1fr);
         gap: 10px;
     }

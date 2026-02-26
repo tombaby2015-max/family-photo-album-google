@@ -66,6 +66,13 @@ var admin = {
         if (panel) panel.style.display = 'none';
         if (sidebar) sidebar.style.display = 'none';
         this.isAdminActive = false;
+        // Выходим из режима секций при выходе из админки
+        if (gallery.sectionModeActive) {
+            gallery.sectionModeActive = false;
+            var fp = document.getElementById('folder-page');
+            if (fp) fp.classList.remove('section-mode');
+            gallery.renderPhotos(0);
+        }
     },
 
     // === ТАЙМЕР БЕЗДЕЙСТВИЯ ===
@@ -149,9 +156,8 @@ var admin = {
                 if (!dragged || !target) return;
 
                 // Делаем настоящий swap в DOM
-                // Используем nextElementSibling (не nextSibling) чтобы пропустить текстовые узлы
-                var draggedNext = dragged.nextElementSibling;
-                var targetNext = target.nextElementSibling;
+                var draggedNext = dragged.nextSibling;
+                var targetNext = target.nextSibling;
 
                 if (draggedNext === target) {
                     container.insertBefore(target, dragged);
@@ -313,19 +319,45 @@ var admin = {
         });
     },
 
-    // === СЕКЦИИ ===
-    // Включить режим секций
+    // === РЕЖИМ СЕКЦИЙ ===
+
     enableSectionMode: function() {
-        var btn = document.getElementById('btn-add-section');
-        if (btn) btn.style.display = 'block';
-        var btnEnable = document.getElementById('btn-enable-sections');
-        if (btnEnable) btnEnable.style.display = 'none';
+        if (!gallery.currentFolder) return;
+        // Только desktop
+        if (window.matchMedia('(max-width: 768px)').matches) return;
+
         gallery.sectionModeActive = true;
-        // Перерисовываем фото в режиме секций
-        if (gallery.currentFolder) {
-            gallery.renderPhotos(0);
-            setTimeout(function() { admin.initPhotosSortable(); }, 150);
-        }
+        document.getElementById('folder-page').classList.add('section-mode');
+
+        var btnEnable = document.getElementById('btn-enable-sections');
+        var btnExit = document.getElementById('btn-exit-sections');
+        var btnAdd = document.getElementById('btn-add-section');
+        if (btnEnable) btnEnable.style.display = 'none';
+        if (btnExit) btnExit.style.display = 'block';
+        if (btnAdd) btnAdd.style.display = 'block';
+
+        // Перерисовываем в режиме секций
+        gallery.renderPhotos(0);
+        setTimeout(function() { admin.initPhotosSortable(); }, 150);
+    },
+
+    exitSectionMode: function() {
+        gallery.sectionModeActive = false;
+        document.getElementById('folder-page').classList.remove('section-mode');
+
+        var btnEnable = document.getElementById('btn-enable-sections');
+        var btnExit = document.getElementById('btn-exit-sections');
+        var btnAdd = document.getElementById('btn-add-section');
+        if (btnEnable) btnEnable.style.display = 'block';
+        if (btnExit) btnExit.style.display = 'none';
+        if (btnAdd) btnAdd.style.display = 'none';
+
+        // Перерисовываем обычным способом
+        gallery.renderPhotos(0);
+
+        // Уничтожаем sortable фото
+        admin._photoSortables.forEach(function(s) { try { s.destroy(); } catch(e) {} });
+        admin._photoSortables = [];
     },
 
     addSection: function() {

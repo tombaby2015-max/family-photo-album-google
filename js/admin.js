@@ -125,82 +125,56 @@ var admin = {
     },
 
     // === УПРАВЛЕНИЕ ПАПКАМИ ===
-    // SWAP папок при drag&drop.
-    // Стратегия: разрешаем SortableJS двигать DOM (sort:true),
-    // но в onEnd мы знаем fromIndex и toIndex — делаем настоящий swap
-    // (SortableJS делает сдвиг, мы возвращаем «вытесненный» элемент на место перетащенного)
     initSortable: function() {
         var container = document.getElementById('folders-container');
         if (!container || !api.isAdmin()) return;
         if (window.matchMedia('(max-width: 768px)').matches) return;
 
         var self = this;
-        var fromIndex = -1; // индекс элемента до drag
+        var fromEl = null;
+        var fromNext = null; // nextSibling ДО drag — для точного восстановления позиции
 
         new Sortable(container, {
             animation: 150,
             handle: '.folder-card',
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
-            // sort: true — SortableJS сам двигает DOM, мы потом доправляем до swap
             onStart: function(evt) {
-                // Запоминаем исходный индекс среди li.folder-card
-                var items = Array.from(container.querySelectorAll('li.folder-card'));
-                fromIndex = items.indexOf(evt.item);
+                fromEl = evt.item;
+                fromNext = evt.item.nextSibling; // сосед ПОСЛЕ перетаскиваемого элемента до drag
             },
             onEnd: function(evt) {
-                var toIndex = evt.newIndex;
-                if (fromIndex === -1 || fromIndex === toIndex) {
-                    fromIndex = -1;
-                    return;
+                if (!fromEl) return;
+                var draggedEl = fromEl;
+                var savedFromNext = fromNext;
+                fromEl = null;
+                fromNext = null;
+
+                // evt.oldIndex / evt.newIndex — индексы ДО и ПОСЛЕ сдвига SortableJS
+                if (evt.oldIndex === evt.newIndex) return;
+
+                // 1. Откатываем: возвращаем draggedEl на его исходное место
+                container.removeChild(draggedEl);
+                if (savedFromNext && savedFromNext.parentNode === container) {
+                    container.insertBefore(draggedEl, savedFromNext);
+                } else {
+                    container.appendChild(draggedEl);
                 }
 
-                // SortableJS уже переместил перетащенный элемент на toIndex (сдвиг).
-                // Нам нужен swap: элемент который сейчас на fromIndex надо поставить на toIndex,
-                // а элемент который был на toIndex — на fromIndex.
-                // После сдвига SortableJS:
-                //   - перетащенный элемент стоит на toIndex
-                //   - элемент который был на toIndex сместился на fromIndex
-                // Это как раз и есть swap! Но только если fromIndex и toIndex не рядом.
-                // На самом деле после onEnd DOM уже содержит правильный swap — SortableJS
-                // вставил перетащенный элемент перед/после нужного, сдвинув остальные.
-                // Нам нужно: элемент с исходного fromIndex теперь на новом месте (toIndex),
-                // а то что было на toIndex — сместилось. Это НЕ swap, это сдвиг.
-                //
-                // Чтобы сделать swap вручную:
-                // Получаем текущее состояние DOM после того как SortableJS всё переставил
-                var items = Array.from(container.querySelectorAll('li.folder-card'));
-                var draggedEl = items[toIndex]; // перетащенный элемент уже на toIndex
-                
-                // Элемент который должен встать на место fromIndex — тот что сейчас на fromIndex
-                // (SortableJS при сдвиге поставил туда бывшего соседа, нам нужен именно тот что был на toIndex до drag)
-                // Проще всего: откатить DOM к исходному состоянию и сделать чистый swap.
-                
-                // Восстанавливаем исходный порядок: убираем draggedEl и вставляем обратно на fromIndex
-                container.removeChild(draggedEl);
-                var refItems = Array.from(container.querySelectorAll('li.folder-card'));
-                if (fromIndex >= refItems.length) {
-                    container.appendChild(draggedEl);
-                } else {
-                    container.insertBefore(draggedEl, refItems[fromIndex]);
-                }
-                
-                // Теперь DOM = исходный порядок. Делаем чистый swap двух элементов.
+                // 2. Теперь DOM = исходный порядок. Берём двух участников swap по их исходным индексам.
                 var allItems = Array.from(container.querySelectorAll('li.folder-card'));
-                var elA = allItems[fromIndex];
-                var elB = allItems[toIndex];
-                
-                if (!elA || !elB || elA === elB) { fromIndex = -1; return; }
-                
-                // Swap в DOM
+                var elA = allItems[evt.oldIndex]; // тот кого тащили
+                var elB = allItems[evt.newIndex]; // тот на чьё место тащили
+
+                if (!elA || !elB || elA === elB) return;
+
+                // 3. Чистый DOM-swap
                 var nextA = elA.nextSibling;
                 var nextB = elB.nextSibling;
-                
+
                 if (nextA === elB) {
-                    // A стоит прямо перед B
                     container.insertBefore(elB, elA);
                 } else if (nextB === elA) {
-                    // B стоит прямо перед A
                     container.insertBefore(elA, elB);
                 } else {
                     var marker = document.createComment('swap');
@@ -210,9 +184,7 @@ var admin = {
                     container.removeChild(marker);
                 }
 
-                fromIndex = -1;
-
-                // Сохраняем итоговый порядок
+                // 4. Сохраняем итоговый порядок на сервере
                 var finalItems = container.querySelectorAll('li.folder-card');
                 var newOrder = [];
                 finalItems.forEach(function(item, i) {

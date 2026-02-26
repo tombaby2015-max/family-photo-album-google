@@ -627,56 +627,72 @@ var gallery = {
         this.openFullscreen(displayIndex);
     },
 
-    // === FULLSCREEN ПРОСМОТР ===
-    _animating: false,
-    _displayOrder: [], // id фото в визуальном порядке (заполняется в _buildDisplayOrder)
+    // === FULLSCREEN ПРОСМОТР (слайдер translateX) ===
+    _displayOrder: [], // id фото в визуальном порядке
+
+    // Строит DOM ленты: по одному слайду на каждое фото в _displayOrder
+    _buildSliderDOM: function() {
+        var self = this;
+        var container = document.querySelector('.fullscreen-viewer__image-container');
+        if (!container) return;
+        container.innerHTML = '';
+        var wrapper = document.createElement('div');
+        wrapper.id = 'fv-slider-wrapper';
+        wrapper.style.cssText = 'display:flex;width:100%;height:100%;will-change:transform;transition:transform 0.40s cubic-bezier(0.22,0.61,0.36,1);';
+        container.appendChild(wrapper);
+        for (var i = 0; i < self._displayOrder.length; i++) {
+            var photo = self._photoById(self._displayOrder[i]);
+            var slide = document.createElement('div');
+            slide.style.cssText = 'flex-shrink:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;';
+            var img = document.createElement('img');
+            img.src = photo ? (photo.thumbUrl || '') : '';
+            img.alt = '';
+            img.draggable = false;
+            img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;pointer-events:none;border-radius:4px;';
+            slide.appendChild(img);
+            wrapper.appendChild(slide);
+        }
+    },
+
+    _sliderGoTo: function(index, animate) {
+        var wrapper = document.getElementById('fv-slider-wrapper');
+        if (!wrapper) return;
+        var container = document.querySelector('.fullscreen-viewer__image-container');
+        var w = container ? container.offsetWidth : window.innerWidth;
+        wrapper.style.transition = animate
+            ? 'transform 0.40s cubic-bezier(0.22,0.61,0.36,1)'
+            : 'none';
+        wrapper.style.transform = 'translateX(' + (-index * w) + 'px)';
+    },
 
     openFullscreen: function(displayIndex) {
         if (!this._displayOrder || displayIndex < 0 || displayIndex >= this._displayOrder.length) return;
 
         this.currentPhotoIndex = displayIndex;
-        var photoId = this._displayOrder[displayIndex];
-        var photo = this._photoById(photoId);
+        var photo = this._photoById(this._displayOrder[displayIndex]);
         if (!photo) return;
 
-        var viewer = document.getElementById('fullscreen-viewer');
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-
-        if (container && !container.querySelector('#fv-img-a')) {
-            container.innerHTML =
-                '<img id="fv-img-a" class="fv-img-current" src="" alt="">' +
-                '<img id="fv-img-b" src="" alt="" style="opacity:0;">';
-        }
-
-        var imgA = document.getElementById('fv-img-a');
-        if (imgA) {
-            imgA.src = photo.thumbUrl || '';
-            imgA.className = 'fv-img-current';
-        }
-        var imgB = document.getElementById('fv-img-b');
-        if (imgB) { imgB.src = ''; imgB.className = ''; imgB.style.opacity = '0'; }
-
-        var link = document.getElementById('download-link');
-        if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
+        this._buildSliderDOM();
+        this._sliderGoTo(displayIndex, false);
 
         var actionsPanel = document.getElementById('fullscreen-actions');
         if (actionsPanel) {
             var isAdmin = api.isAdmin();
             actionsPanel.innerHTML =
                 (isAdmin ?
-                    '<button class="fv-action-btn" id="btn-set-cover" onclick="admin.setFolderCover()" title="Превью папки">' +
+                    '<button class="fv-action-btn" onclick="admin.setFolderCover()" title="Превью папки">' +
                     '<i data-lucide="image"></i><span>Обложка</span></button>' : '') +
                 '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + (photo.name || 'photo.jpg') + '" title="Скачать оригинал">' +
                 '<i data-lucide="download"></i><span>Скачать</span></a>' +
                 (isAdmin ?
-                    '<button class="fv-action-btn fv-action-btn--danger" id="btn-delete-photo" onclick="admin.deleteCurrentPhoto()" title="Удалить">' +
+                    '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()" title="Удалить">' +
                     '<i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
                 '<button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">' +
                 '<i data-lucide="x"></i><span>Закрыть</span></button>';
         }
 
+        var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'flex';
-        this._animating = false;
 
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
@@ -688,90 +704,72 @@ var gallery = {
             else if (e.key === 'ArrowRight') self.nextPhoto();
         };
         document.addEventListener('keydown', this.keyHandler);
-        this.initSwipe();
+        this._initSliderSwipe();
     },
 
-    // ИСПРАВЛЕНИЕ #4: правильная логика направления анимации.
-    // direction='left'  → пользователь нажал "вперёд" (→): текущее фото уходит ВЛЕВО,  новое приходит СПРАВА
-    // direction='right' → пользователь нажал "назад"  (←): текущее фото уходит ВПРАВО, новое приходит СЛЕВА
-    _changePhoto: function(newDisplayIndex, direction) {
-        if (this._animating) return;
-        if (!this._displayOrder || newDisplayIndex < 0 || newDisplayIndex >= this._displayOrder.length) return;
-
-        var self = this;
-        var photoId = this._displayOrder[newDisplayIndex];
-        var photo = this._photoById(photoId);
-        if (!photo) return;
-
-        var imgA = document.getElementById('fv-img-a');
-        var imgB = document.getElementById('fv-img-b');
-        if (!imgA || !imgB) { self.openFullscreen(newDisplayIndex); return; }
-
-        this._animating = true;
-        this.currentPhotoIndex = newDisplayIndex;
-
-        imgB.src = photo.thumbUrl || '';
-
+    _changePhoto: function(newIndex) {
+        if (!this._displayOrder || newIndex < 0 || newIndex >= this._displayOrder.length) return;
+        this.currentPhotoIndex = newIndex;
+        this._sliderGoTo(newIndex, true);
+        // Обновляем ссылку на скачивание
+        var photo = this._photoById(this._displayOrder[newIndex]);
         var link = document.getElementById('download-link');
-        if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
+        if (link && photo) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
+    },
 
-        // direction='left' (→ вперёд): A уходит влево, B приходит справа
-        // direction='right' (← назад): A уходит вправо, B приходит слева
-        if (direction === 'left') {
-            imgB.className = 'fv-img-enter-from-right';  // B стартует справа (за экраном), без анимации
-        } else {
-            imgB.className = 'fv-img-enter-from-left';   // B стартует слева (за экраном), без анимации
+    _initSliderSwipe: function() {
+        var self = this;
+        var viewer = document.getElementById('fullscreen-viewer');
+        if (!viewer) return;
+
+        var startX = 0, startY = 0, isDragging = false, baseTranslate = 0;
+
+        function getClientX(e) { return e.touches ? e.touches[0].clientX : e.clientX; }
+        function getClientY(e) { return e.touches ? e.touches[0].clientY : e.clientY; }
+
+        function onStart(e) {
+            if (e.target.closest && (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav'))) return;
+            startX = getClientX(e);
+            startY = getClientY(e);
+            isDragging = true;
+            var wrapper = document.getElementById('fv-slider-wrapper');
+            if (wrapper) wrapper.style.transition = 'none';
+            var container = document.querySelector('.fullscreen-viewer__image-container');
+            var w = container ? container.offsetWidth : window.innerWidth;
+            baseTranslate = -self.currentPhotoIndex * w;
+        }
+        function onMove(e) {
+            if (!isDragging) return;
+            var dx = getClientX(e) - startX;
+            var dy = getClientY(e) - startY;
+            if (Math.abs(dy) > Math.abs(dx)) { isDragging = false; return; }
+            e.preventDefault();
+            var wrapper = document.getElementById('fv-slider-wrapper');
+            if (wrapper) wrapper.style.transform = 'translateX(' + (baseTranslate + dx) + 'px)';
+        }
+        function onEnd(e) {
+            if (!isDragging) return;
+            isDragging = false;
+            var endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
+            var dx = endX - startX;
+            var container = document.querySelector('.fullscreen-viewer__image-container');
+            var w = container ? container.offsetWidth : window.innerWidth;
+            var newIndex = self.currentPhotoIndex;
+            if (dx < -w * 0.25 && newIndex < self._displayOrder.length - 1) newIndex++;
+            else if (dx > w * 0.25 && newIndex > 0) newIndex--;
+            self._changePhoto(newIndex);
         }
 
-        requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-                if (direction === 'left') {
-                    imgA.className = 'fv-img-exit-left';   // A уходит влево
-                } else {
-                    imgA.className = 'fv-img-exit-right';  // A уходит вправо
-                }
-                imgB.className = 'fv-img-current';         // B едет в центр
+        viewer.onmousedown = onStart;
+        viewer.onmousemove = onMove;
+        viewer.onmouseup = onEnd;
+        viewer.onmouseleave = onEnd;
+        viewer.ontouchstart = onStart;
+        viewer.ontouchmove = onMove;
+        viewer.ontouchend = onEnd;
+        viewer.ontouchcancel = onEnd;
 
-                setTimeout(function() {
-                    imgA.src = imgB.src;
-                    imgA.className = 'fv-img-current';
-                    imgB.className = '';
-                    imgB.style.opacity = '0';
-                    imgB.src = '';
-                    self._animating = false;
-                }, 350);
-            });
-        });
-    },
-
-    initSwipe: function() {
-        var self = this;
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-        if (!container) return;
-
-        var startX = 0, startY = 0;
-
-        container.ontouchstart = function(e) {
-            startX = e.changedTouches[0].screenX;
-            startY = e.changedTouches[0].screenY;
-        };
-
-        container.ontouchmove = function(e) {
-            var dx = Math.abs(e.changedTouches[0].screenX - startX);
-            var dy = Math.abs(e.changedTouches[0].screenY - startY);
-            if (dx > dy) e.preventDefault();
-        };
-
-        container.ontouchend = function(e) {
-            var dx = e.changedTouches[0].screenX - startX;
-            var dy = e.changedTouches[0].screenY - startY;
-            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
-                // ИСПРАВЛЕНИЕ #4: свайп влево → следующее фото (direction='left')
-                // свайп вправо → предыдущее фото (direction='right')
-                if (dx < 0) self._changePhoto(self.currentPhotoIndex + 1, 'left');
-                else self._changePhoto(self.currentPhotoIndex - 1, 'right');
-            }
-        };
+        window.onresize = function() { self._sliderGoTo(self.currentPhotoIndex, false); };
     },
 
     closeFullscreen: function() {
@@ -786,12 +784,12 @@ var gallery = {
 
     prevPhoto: function() {
         if (this.currentPhotoIndex > 0)
-            this._changePhoto(this.currentPhotoIndex - 1, 'right');
+            this._changePhoto(this.currentPhotoIndex - 1);
     },
 
     nextPhoto: function() {
         if (this._displayOrder && this.currentPhotoIndex < this._displayOrder.length - 1)
-            this._changePhoto(this.currentPhotoIndex + 1, 'left');
+            this._changePhoto(this.currentPhotoIndex + 1);
     },
 
     showMainPage: function() {

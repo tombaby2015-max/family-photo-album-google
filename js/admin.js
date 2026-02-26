@@ -132,10 +132,14 @@ var admin = {
 
         var self = this;
 
-        // Уничтожаем предыдущий инстанс если есть
         if (self._folderSortable) {
             try { self._folderSortable.destroy(); } catch(e) {}
             self._folderSortable = null;
+        }
+
+        // Подключаем Swap-плагин (доступен в том же UMD-бандле SortableJS)
+        if (Sortable.mount && typeof Sortable.Swap !== 'undefined') {
+            Sortable.mount(new Sortable.Swap());
         }
 
         self._folderSortable = new Sortable(container, {
@@ -143,7 +147,8 @@ var admin = {
             handle: '.folder-card',
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
-            sort: false,
+            swap: true,
+            swapClass: 'sortable-swap-highlight',
             onEnd: function(evt) {
                 var i = evt.oldIndex;
                 var j = evt.newIndex;
@@ -160,7 +165,7 @@ var admin = {
                 });
                 self.saveFoldersOrder(newOrder);
 
-                // Перерисовываем DOM после того как SortableJS завершил анимацию
+                // Перерисовываем DOM из данных
                 setTimeout(function() { gallery.renderFolders(); }, 0);
             }
         });

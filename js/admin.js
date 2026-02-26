@@ -131,71 +131,34 @@ var admin = {
         if (window.matchMedia('(max-width: 768px)').matches) return;
 
         var self = this;
-        var fromEl = null;
-        var fromNext = null; // nextSibling ДО drag — для точного восстановления позиции
 
         new Sortable(container, {
             animation: 150,
             handle: '.folder-card',
             ghostClass: 'sortable-ghost',
             dragClass: 'sortable-drag',
-            onStart: function(evt) {
-                fromEl = evt.item;
-                fromNext = evt.item.nextSibling; // сосед ПОСЛЕ перетаскиваемого элемента до drag
-            },
+            sort: false,
             onEnd: function(evt) {
-                if (!fromEl) return;
-                var draggedEl = fromEl;
-                var savedFromNext = fromNext;
-                fromEl = null;
-                fromNext = null;
+                var i = evt.oldIndex;
+                var j = evt.newIndex;
+                if (i === j) return;
 
-                // evt.oldIndex / evt.newIndex — индексы ДО и ПОСЛЕ сдвига SortableJS
-                if (evt.oldIndex === evt.newIndex) return;
+                // Swap в массиве данных
+                var tmp = gallery.folders[i];
+                gallery.folders[i] = gallery.folders[j];
+                gallery.folders[j] = tmp;
 
-                // 1. Откатываем: возвращаем draggedEl на его исходное место
-                container.removeChild(draggedEl);
-                if (savedFromNext && savedFromNext.parentNode === container) {
-                    container.insertBefore(draggedEl, savedFromNext);
-                } else {
-                    container.appendChild(draggedEl);
-                }
+                // Перерисовываем DOM из данных
+                gallery.renderFolders();
 
-                // 2. Теперь DOM = исходный порядок. Берём двух участников swap по их исходным индексам.
-                var allItems = Array.from(container.querySelectorAll('li.folder-card'));
-                var elA = allItems[evt.oldIndex]; // тот кого тащили
-                var elB = allItems[evt.newIndex]; // тот на чьё место тащили
-
-                if (!elA || !elB || elA === elB) return;
-
-                // 3. Чистый DOM-swap
-                var nextA = elA.nextSibling;
-                var nextB = elB.nextSibling;
-
-                if (nextA === elB) {
-                    container.insertBefore(elB, elA);
-                } else if (nextB === elA) {
-                    container.insertBefore(elA, elB);
-                } else {
-                    var marker = document.createComment('swap');
-                    container.insertBefore(marker, elA);
-                    container.insertBefore(elA, nextB);
-                    container.insertBefore(elB, marker);
-                    container.removeChild(marker);
-                }
-
-                // 4. Сохраняем итоговый порядок на сервере
-                var finalItems = container.querySelectorAll('li.folder-card');
-                var newOrder = [];
-                finalItems.forEach(function(item, i) {
-                    var id = item.getAttribute('data-folder-id');
-                    if (id) newOrder.push({ id: id, order: i + 1 });
+                // Сохраняем на сервере
+                var newOrder = gallery.folders.map(function(folder, idx) {
+                    return { id: folder.id, order: idx + 1 };
                 });
                 self.saveFoldersOrder(newOrder);
             }
         });
     },
-
     saveFoldersOrder: function(newOrder) {
         api.reorderFolders(newOrder).then(function(result) {
             if (!result || !result.success) alert('Ошибка сохранения порядка!');

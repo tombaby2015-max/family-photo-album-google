@@ -446,6 +446,7 @@
     overflow: hidden;
     align-items: stretch;
     padding-bottom: 0;
+    padding-right: 20px; /* немного уменьшаем правый отступ чтобы дать блокам больше места */
 }
 
 /* photos-container в режиме секций — два блока вертикально */
@@ -455,31 +456,30 @@
     height: 100%;
     overflow: hidden;
     flex: 1;
+    min-width: 0;
 }
 
 /* Верхний блок — нераспределённые фото (~42% высоты) */
 .section-mode-top {
     flex: 0 0 42%;
-    overflow-y: auto;
+    overflow-y: scroll; /* всегда резервируем место под скроллбар — одинаковая ширина с нижним */
     overflow-x: hidden;
     border-bottom: 2px solid #e0e0e0;
     padding-bottom: 10px;
-    padding-right: 4px;
 }
 
 /* Нижний блок — секции (остаток) */
 .section-mode-bottom {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: scroll; /* всегда резервируем место под скроллбар */
     overflow-x: hidden;
-    padding-right: 4px;
 }
 
-/* Сетки внутри режима секций */
+/* Сетки внутри режима секций — 5 колонок вместо 4, чтобы использовать доступное пространство */
 .photos-section-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
     min-height: 60px;
 }
 

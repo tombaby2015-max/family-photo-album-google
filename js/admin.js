@@ -347,7 +347,7 @@ var admin = {
         var folderId = gallery.currentFolder.id;
         api.createSection(folderId, title.trim()).then(function(result) {
             if (result && result.success) {
-                gallery.loadPhotos(folderId, 0);
+                gallery.loadPhotos(folderId);
                 setTimeout(function() {
                     if (!gallery.sectionModeActive && api.isAdmin()) {
                         admin.enableSectionMode();
@@ -390,7 +390,7 @@ var admin = {
         var wasSectionMode = gallery.sectionModeActive;
         api.deleteSection(folderId, sectionId).then(function(result) {
             if (result && result.success) {
-                gallery.loadPhotos(folderId, 0);
+                gallery.loadPhotos(folderId);
                 if (wasSectionMode) {
                     setTimeout(function() {
                         gallery.sectionModeActive = true;

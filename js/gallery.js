@@ -742,9 +742,15 @@ var gallery = {
         var panel = document.getElementById('fullscreen-actions');
         if (!panel) return;
         var isAdmin = api.isAdmin();
+
+        // Имя файла при скачивании: "Название папки — оригинальное имя.jpg"
+        var folderTitle = (gallery.currentFolder && gallery.currentFolder.title) ? gallery.currentFolder.title : '';
+        var originalName = photo.name || 'photo.jpg';
+        var downloadName = folderTitle ? (folderTitle + ' — ' + originalName) : originalName;
+
         panel.innerHTML =
             (isAdmin ? '<button class="fv-action-btn" onclick="admin.setFolderCover()"><i data-lucide="image"></i><span>Обложка</span></button>' : '') +
-            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + (photo.name || 'photo.jpg') + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
+            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + downloadName + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
             (isAdmin ? '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()"><i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
             '<button class="fv-action-btn" onclick="gallery.closeFullscreen()"><i data-lucide="x"></i><span>Закрыть</span></button>';
     },

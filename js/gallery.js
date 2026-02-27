@@ -427,7 +427,8 @@ var gallery = {
             api.getPhotosThumbnails(folderId, allPhotos).then(function(thumbUrls) {
                 for (var i = 0; i < allPhotos.length; i++) {
                     allPhotos[i].thumbUrl = thumbUrls[allPhotos[i].id] || '';
-                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original';
+                    var folderName = (gallery.currentFolder && gallery.currentFolder.title) ? encodeURIComponent(gallery.currentFolder.title) : '';
+                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName;
                 }
 
                 if (container) container.innerHTML = '';
@@ -743,14 +744,9 @@ var gallery = {
         if (!panel) return;
         var isAdmin = api.isAdmin();
 
-        // Имя файла при скачивании: "Название папки — оригинальное имя.jpg"
-        var folderTitle = (gallery.currentFolder && gallery.currentFolder.title) ? gallery.currentFolder.title : '';
-        var originalName = photo.name || 'photo.jpg';
-        var downloadName = folderTitle ? (folderTitle + ' — ' + originalName) : originalName;
-
         panel.innerHTML =
             (isAdmin ? '<button class="fv-action-btn" onclick="admin.setFolderCover()"><i data-lucide="image"></i><span>Обложка</span></button>' : '') +
-            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + downloadName + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
+            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
             (isAdmin ? '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()"><i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
             '<button class="fv-action-btn" onclick="gallery.closeFullscreen()"><i data-lucide="x"></i><span>Закрыть</span></button>';
     },

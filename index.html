@@ -99,25 +99,27 @@
             </div>
         </div>
 
-        <!-- КНОПКА "ДОБАВИТЬ НА ЭКРАН" (только для гостей, скрывается после установки) -->
-    <div id="pwa-install-bar" style="display:none;">
+        <!-- КНОПКА "ДОБАВИТЬ НА ЭКРАН" -->
+    <div id="pwa-install-bar" style="display:none; background:rgba(0,0,0,0.85); padding:16px 0;">
         <div class="t-container">
-            <div class="t-col t-col_12" style="text-align:center; padding: 20px 0 10px;">
+            <div class="t-col t-col_12" style="text-align:center;">
+                <!-- Кнопка для Android/Chrome/Edge/ПК -->
                 <button id="pwa-install-btn" onclick="pwa.install()" style="
-                    display:inline-flex; align-items:center; gap:10px;
+                    display:none; align-items:center; gap:10px;
                     padding:14px 28px; border-radius:50px;
                     background:rgba(255,255,255,0.15); backdrop-filter:blur(10px);
-                    border:1px solid rgba(255,255,255,0.3); color:#fff;
-                    font-size:15px; cursor:pointer; transition:all 0.2s;
+                    border:1px solid rgba(255,255,255,0.4); color:#fff;
+                    font-size:15px; cursor:pointer; transition:background 0.2s;
                 " onmouseover="this.style.background='rgba(255,255,255,0.25)'"
                    onmouseout="this.style.background='rgba(255,255,255,0.15)'">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v13M5 9l7 7 7-7"/><path d="M3 20h18"/></svg>
                     Добавить на главный экран
                 </button>
-                <!-- Подсказка для Safari/iPhone — показывается вместо кнопки -->
-                <div id="pwa-safari-hint" style="display:none; color:rgba(255,255,255,0.85); font-size:14px; line-height:1.6;">
-                    Нажмите <strong>Поделиться</strong> 
-                    <svg style="display:inline;vertical-align:middle;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                <!-- Подсказка для Safari/iPhone -->
+                <div id="pwa-safari-hint" style="display:none; color:rgba(255,255,255,0.9); font-size:14px; line-height:1.8;">
+                    Чтобы добавить на главный экран:<br>
+                    нажмите <strong>Поделиться</strong>
+                    <svg style="display:inline;vertical-align:middle;margin:0 2px;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
                     → <strong>На экран «Домой»</strong>
                 </div>
             </div>
@@ -261,28 +263,41 @@
             var btn = document.getElementById('pwa-install-btn');
             var safariHint = document.getElementById('pwa-safari-hint');
 
-            // Не показываем если уже установлено
+            // Не показываем если уже установлено как приложение
             if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
 
             // Не показываем администратору
             if (localStorage.getItem('admin_token')) return;
 
-            // Chrome / Android / Edge — ловим событие установки
-            window.addEventListener('beforeinstallprompt', function(e) {
-                e.preventDefault();
-                self._deferredPrompt = e;
-                if (bar) bar.style.display = 'block';
-                if (safariHint) safariHint.style.display = 'none';
-                if (btn) btn.style.display = 'inline-flex';
-            });
-
-            // Safari на iPhone — показываем подсказку вручную
             var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-            var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-            if (isIos && isSafari) {
+            var isSafari = isIos && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+            if (isSafari) {
+                // iPhone Safari — показываем подсказку сразу
                 if (bar) bar.style.display = 'block';
-                if (btn) btn.style.display = 'none';
                 if (safariHint) safariHint.style.display = 'block';
+                if (btn) btn.style.display = 'none';
+            } else {
+                // Chrome / Android / Edge / ПК
+                // Сначала ждём событие браузера — оно даёт нам право показать кнопку установки
+                window.addEventListener('beforeinstallprompt', function(e) {
+                    e.preventDefault();
+                    self._deferredPrompt = e;
+                    if (bar) bar.style.display = 'block';
+                    if (btn) btn.style.display = 'inline-flex';
+                    if (safariHint) safariHint.style.display = 'none';
+                });
+
+                // Если событие не пришло за 3 сек — показываем универсальную подсказку
+                setTimeout(function() {
+                    if (!self._deferredPrompt && bar && bar.style.display === 'none') {
+                        bar.style.display = 'block';
+                        if (safariHint) {
+                            safariHint.style.display = 'block';
+                            safariHint.innerHTML = 'Откройте меню браузера и выберите<br><strong>«Установить приложение»</strong> или <strong>«Добавить на главный экран»</strong>';
+                        }
+                    }
+                }, 3000);
             }
 
             // Скрываем после успешной установки
@@ -295,7 +310,7 @@
         install: function() {
             if (!this._deferredPrompt) return;
             this._deferredPrompt.prompt();
-            this._deferredPrompt.userChoice.then(function(result) {
+            this._deferredPrompt.userChoice.then(function() {
                 var bar = document.getElementById('pwa-install-bar');
                 if (bar) bar.style.display = 'none';
             });

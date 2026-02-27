@@ -1,6 +1,21 @@
-// gallery.js — показывает папки и фото (Google Drive версия) 
+// gallery.js — показывает папки и фото (Google Drive версия)
+//
+// ОПТИМИЗАЦИЯ: добавлен localStorage кеш для папок
+// Логика "сначала показать из кеша, потом проверить на сервере"
+//
+// Всё остальное не изменилось:
+// - роли посетитель/администратор
+// - секции внутри папок
+// - батчевая загрузка по 40 фото
+// - обложка с настройкой позиции
+// - hash в URL (#folder=ID)
+// - полноэкранный просмотр, свайпы, клавиши
 
 var BATCH_SIZE = 40;
+
+// Настройки кеша
+var CACHE_KEY_FOLDERS = 'photo_cache_folders';
+var CACHE_TTL = 30 * 60 * 1000; // 30 минут в миллисекундах
 
 var gallery = {
     folders: [],
@@ -14,6 +29,58 @@ var gallery = {
     sections: [],
     sectionModeActive: false,
 
+    // ==========================================
+    // КЕШ ПАПОК
+    // Сохраняем список папок в localStorage браузера.
+    // При следующем открытии — показываем мгновенно из кеша,
+    // фоном тихо загружаем свежие данные с сервера.
+    // Если данные изменились — обновляем страницу незаметно.
+    // ==========================================
+
+    // Сохранить папки в кеш
+    _saveFoldersToCache: function(folders) {
+        // Администраторам не кешируем — им всегда нужны актуальные данные
+        if (api.isAdmin()) return;
+        try {
+            var entry = {
+                folders: folders,
+                timestamp: Date.now()
+            };
+            localStorage.setItem(CACHE_KEY_FOLDERS, JSON.stringify(entry));
+        } catch(e) {
+            // localStorage может быть недоступен (приватный режим и т.д.) — игнорируем
+        }
+    },
+
+    // Прочитать папки из кеша
+    // Возвращает массив папок или null если кеш устарел/отсутствует
+    _loadFoldersFromCache: function() {
+        if (api.isAdmin()) return null;
+        try {
+            var raw = localStorage.getItem(CACHE_KEY_FOLDERS);
+            if (!raw) return null;
+            var entry = JSON.parse(raw);
+            // Проверяем не устарел ли кеш
+            if (Date.now() - entry.timestamp > CACHE_TTL) {
+                localStorage.removeItem(CACHE_KEY_FOLDERS);
+                return null;
+            }
+            return entry.folders || null;
+        } catch(e) {
+            return null;
+        }
+    },
+
+    // Сбросить кеш (вызывается после синхронизации или изменений)
+    clearFoldersCache: function() {
+        try {
+            localStorage.removeItem(CACHE_KEY_FOLDERS);
+        } catch(e) {}
+    },
+
+    // ==========================================
+    // ИНИЦИАЛИЗАЦИЯ
+    // ==========================================
     init: function() {
         var self = this;
         var hash = window.location.hash;
@@ -29,6 +96,7 @@ var gallery = {
         var self = this;
         api.getFolders().then(function(folders) {
             self.folders = folders;
+            self._saveFoldersToCache(folders);
             self.renderFolders();
             var folder = null;
             for (var i = 0; i < folders.length; i++) {
@@ -39,16 +107,71 @@ var gallery = {
         });
     },
 
+    // ==========================================
+    // ЗАГРУЗКА ПАПОК — с кешем
+    //
+    // Шаг 1: Мгновенно показываем из кеша (если есть)
+    // Шаг 2: Фоном загружаем с сервера
+    // Шаг 3: Если данные отличаются — обновляем страницу
+    // ==========================================
     loadFolders: function() {
         var self = this;
         var container = document.getElementById('folders-container');
-        if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
-        api.getFolders().then(function(folders) {
-            self.folders = folders;
+
+        // Пробуем загрузить из кеша
+        var cached = self._loadFoldersFromCache();
+
+        if (cached && cached.length > 0) {
+            // Есть кеш — показываем мгновенно
+            self.folders = cached;
             self.renderFolders();
-        });
+
+            // Фоном тихо загружаем свежие данные
+            api.getFolders().then(function(freshFolders) {
+                // Сравниваем с кешем — изменилось ли что-то?
+                if (self._foldersChanged(cached, freshFolders)) {
+                    // Данные изменились — обновляем
+                    self.folders = freshFolders;
+                    self._saveFoldersToCache(freshFolders);
+                    self.renderFolders();
+                } else {
+                    // Ничего не изменилось — просто обновляем временную метку кеша
+                    self._saveFoldersToCache(freshFolders);
+                }
+            });
+        } else {
+            // Кеша нет — обычная загрузка с индикатором
+            if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
+            api.getFolders().then(function(folders) {
+                self.folders = folders;
+                self._saveFoldersToCache(folders);
+                self.renderFolders();
+            });
+        }
     },
 
+    // Сравниваем два списка папок — изменилось ли что-то важное
+    _foldersChanged: function(oldFolders, newFolders) {
+        if (oldFolders.length !== newFolders.length) return true;
+        for (var i = 0; i < newFolders.length; i++) {
+            var nf = newFolders[i];
+            var of_ = null;
+            for (var j = 0; j < oldFolders.length; j++) {
+                if (oldFolders[j].id === nf.id) { of_ = oldFolders[j]; break; }
+            }
+            if (!of_) return true;
+            if (of_.title !== nf.title) return true;
+            if (of_.hidden !== nf.hidden) return true;
+            if (of_.photo_count !== nf.photo_count) return true;
+            if (of_.cover_url !== nf.cover_url) return true;
+            if (of_.order !== nf.order) return true;
+        }
+        return false;
+    },
+
+    // ==========================================
+    // РЕНДЕР ПАПОК — не изменился
+    // ==========================================
     renderFolders: function() {
         var self = this;
         var container = document.getElementById('folders-container');
@@ -140,9 +263,14 @@ var gallery = {
                 '</div>';
         }
 
+        // Счётчик фото: для админа показываем полное число (включая скрытые)
+        var photoCount = isAdmin
+            ? (folder.photo_count_admin || folder.photo_count || 0)
+            : (folder.photo_count || 0);
+
         return '<li id="folder-' + folder.id + '" class="t214__col t-item t-card__col t-col t-col_4 folder-card ' + hiddenClass + (isEditing ? ' editing' : '') + '" data-folder-id="' + folder.id + '">' +
             '<div class="folder-card__image" id="folder-image-' + folder.id + '" style="background-color:#eee;">' +
-                '<div class="folder-card__title">' + folder.title + (folder.photo_count > 0 ? ' <span style="font-size:13px;opacity:0.8;font-weight:400;">(' + folder.photo_count + ' фото)</span>' : '') + '</div>' +
+                '<div class="folder-card__title">' + folder.title + (photoCount > 0 ? ' <span style="font-size:13px;opacity:0.8;font-weight:400;">(' + photoCount + ' фото)</span>' : '') + '</div>' +
                 adminActions +
                 previewEditor +
             '</div>' +
@@ -218,6 +346,8 @@ var gallery = {
             cover_scale: self.previewState.scale
         }).then(function() {
             self.editingFolder = null;
+            // Сбрасываем кеш — обложка изменилась
+            self.clearFoldersCache();
             self.loadFolders();
         });
     },
@@ -383,8 +513,6 @@ var gallery = {
 
     _buildDisplayOrder: function() {
         var self = this;
-        // Порядок листания = порядок visiblePhotos (как пришли с сервера).
-        // Не перегруппируем по секциям — это ломало порядок.
         self._displayOrder = self.visiblePhotos.map(function(p) { return p.id; });
     },
 
@@ -400,7 +528,6 @@ var gallery = {
         return null;
     },
 
-    // ОБЫЧНЫЙ РЕЖИМ
     _renderNormalMode: function(container) {
         var self = this;
         var sections = self.sections || [];
@@ -472,7 +599,6 @@ var gallery = {
         }
     },
 
-    // РЕЖИМ СЕКЦИЙ (только десктоп, только админ)
     _renderSectionMode: function(container) {
         var self = this;
         var sections = self.sections || [];
@@ -604,7 +730,6 @@ var gallery = {
             if (checkbox) admin.togglePhotoSelection(photoId, checkbox);
             return;
         }
-        // Ищем индекс в visiblePhotos напрямую по id — самый надёжный способ
         var displayIndex = -1;
         for (var i = 0; i < this.visiblePhotos.length; i++) {
             if (this.visiblePhotos[i].id === photoId) {
@@ -616,13 +741,7 @@ var gallery = {
         this.openFullscreen(displayIndex);
     },
 
-    // ============================================================
-    // ============================================================
-    // FULLSCREEN ПРОСМОТР
-    // Одна <img>, меняем src. Свайп только добавляет жест.
-    // Порядок = visiblePhotos[0..N] — никакой дополнительной логики.
-    // ============================================================
-
+    // === FULLSCREEN ПРОСМОТР ===
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
         this.currentPhotoIndex = index;
@@ -686,19 +805,17 @@ var gallery = {
             this._goToPhoto(this.currentPhotoIndex + 1);
     },
 
-    // Инициализируется ОДИН РАЗ при DOMContentLoaded
     initSwipe: function() {
         var self = this;
         var viewer = document.getElementById('fullscreen-viewer');
         if (!viewer) return;
 
-        var startX = 0, startY = 0, moved = false;
+        var startX = 0, startY = 0;
 
         viewer.addEventListener('touchstart', function(e) {
             if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
-            moved = false;
         }, { passive: true });
 
         viewer.addEventListener('touchend', function(e) {
@@ -706,27 +823,23 @@ var gallery = {
             var dx = e.changedTouches[0].clientX - startX;
             var dy = e.changedTouches[0].clientY - startY;
 
-            // Игнорируем вертикальные жесты
             if (Math.abs(dy) > Math.abs(dx)) return;
 
             var W = window.innerWidth;
 
             if (Math.abs(dx) < 15) {
-                // Тап — навигация по зонам экрана
                 var tapX = e.changedTouches[0].clientX;
                 if (tapX < W * 0.25) self.prevPhoto();
                 else if (tapX > W * 0.75) self.nextPhoto();
             } else if (dx < -W * 0.2) {
-                // Свайп влево — следующее
                 self.nextPhoto();
             } else if (dx > W * 0.2) {
-                // Свайп вправо — предыдущее
                 self.prevPhoto();
             }
         }, { passive: true });
     },
 
-        showMainPage: function() {
+    showMainPage: function() {
         if (typeof admin !== 'undefined' && admin.isSelectionMode) {
             admin.exitSelectionMode();
         }

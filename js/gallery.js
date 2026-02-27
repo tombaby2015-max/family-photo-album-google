@@ -11,7 +11,6 @@
 // - hash в URL (#folder=ID)
 // - полноэкранный просмотр, свайпы, клавиши
 
-var BATCH_SIZE = 40;
 
 // Настройки кеша
 var CACHE_KEY_FOLDERS = 'photo_cache_folders';
@@ -388,7 +387,7 @@ var gallery = {
             window.location.hash = 'folder=' + folder.id;
         }
 
-        this.loadPhotos(folder.id, 0);
+        this.loadPhotos(folder.id);
     },
 
     _resetSectionModeButtons: function() {
@@ -401,16 +400,15 @@ var gallery = {
     },
 
     // === ЗАГРУЗКА ФОТО ===
-    loadPhotos: function(folderId, offset) {
+    // Загружаем все фото папки за один запрос (после оптимизации KV структуры)
+    loadPhotos: function(folderId) {
         var self = this;
         var container = document.getElementById('photos-container');
 
-        if (offset === 0) {
-            if (container) container.innerHTML = '<div class="loading">Загрузка фото...</div>';
-            self.currentPhotos = [];
-            self.visiblePhotos = [];
-            self.sections = [];
-        }
+        if (container) container.innerHTML = '<div class="loading">Загрузка фото...</div>';
+        self.currentPhotos = [];
+        self.visiblePhotos = [];
+        self.sections = [];
 
         Promise.all([
             api.getPhotosList(folderId),
@@ -419,37 +417,21 @@ var gallery = {
             var allPhotos = results[0];
             self.sections = results[1] || [];
             self.currentPhotos = allPhotos;
+            self.visiblePhotos = allPhotos.slice();
 
-            var batch = allPhotos.slice(offset, offset + BATCH_SIZE);
-            if (batch.length === 0) {
-                if (offset === 0 && container) {
-                    container.innerHTML = '<div class="empty-state"><h4>В этой папке пока нет фото</h4></div>';
-                }
+            if (allPhotos.length === 0) {
+                if (container) container.innerHTML = '<div class="empty-state"><h4>В этой папке пока нет фото</h4></div>';
                 return;
             }
 
-            api.getPhotosThumbnails(folderId, batch).then(function(thumbUrls) {
-                for (var i = 0; i < batch.length; i++) {
-                    batch[i].thumbUrl = thumbUrls[batch[i].id] || '';
-                    batch[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + batch[i].file_id + '&size=original';
+            api.getPhotosThumbnails(folderId, allPhotos).then(function(thumbUrls) {
+                for (var i = 0; i < allPhotos.length; i++) {
+                    allPhotos[i].thumbUrl = thumbUrls[allPhotos[i].id] || '';
+                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original';
                 }
 
-                if (offset === 0 && container) {
-                    container.innerHTML = '';
-                } else {
-                    var oldBtn = document.getElementById('load-more-container');
-                    if (oldBtn) oldBtn.remove();
-                }
-
-                for (var j = 0; j < batch.length; j++) {
-                    self.visiblePhotos.push(batch[j]);
-                }
-
-                self.renderPhotos(offset);
-
-                if (offset + BATCH_SIZE < allPhotos.length) {
-                    self.showLoadMoreButton(folderId, offset + BATCH_SIZE, allPhotos);
-                }
+                if (container) container.innerHTML = '';
+                self.renderPhotos(0);
 
                 if (api.isAdmin() && self.sectionModeActive) {
                     setTimeout(function() {
@@ -458,27 +440,8 @@ var gallery = {
                 }
             });
         }).catch(function() {
-            if (offset === 0 && container) {
-                container.innerHTML = '<p>Ошибка загрузки</p>';
-            }
+            if (container) container.innerHTML = '<p>Ошибка загрузки</p>';
         });
-    },
-
-    showLoadMoreButton: function(folderId, nextOffset, allPhotos) {
-        var self = this;
-        var container = document.getElementById('photos-container');
-        if (!container) return;
-
-        var div = document.createElement('div');
-        div.id = 'load-more-container';
-        div.style.cssText = 'text-align:center;padding:20px;';
-        div.innerHTML = '<button id="load-more-btn" style="padding:15px 30px;background:rgba(0,0,0,0.05);border:none;border-radius:8px;cursor:pointer;color:#666;font-size:16px;">+ Загрузить ещё фото</button>';
-        container.appendChild(div);
-
-        document.getElementById('load-more-btn').onclick = function() {
-            this.textContent = 'Загружается...';
-            self.loadPhotos(folderId, nextOffset);
-        };
     },
 
     // === РЕНДЕР ФОТО ===

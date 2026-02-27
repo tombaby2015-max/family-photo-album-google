@@ -137,7 +137,6 @@ var admin = {
             self._folderSortable = null;
         }
 
-        // Подключаем Swap-плагин (доступен в том же UMD-бандле SortableJS)
         if (Sortable.mount && typeof Sortable.Swap !== 'undefined') {
             Sortable.mount(new Sortable.Swap());
         }
@@ -154,22 +153,20 @@ var admin = {
                 var j = evt.newIndex;
                 if (i === j) return;
 
-                // Swap в массиве данных
                 var tmp = gallery.folders[i];
                 gallery.folders[i] = gallery.folders[j];
                 gallery.folders[j] = tmp;
 
-                // Сохраняем на сервере
                 var newOrder = gallery.folders.map(function(folder, idx) {
                     return { id: folder.id, order: idx + 1 };
                 });
                 self.saveFoldersOrder(newOrder);
 
-                // Перерисовываем DOM из данных
                 setTimeout(function() { gallery.renderFolders(); }, 0);
             }
         });
     },
+
     saveFoldersOrder: function(newOrder) {
         api.reorderFolders(newOrder).then(function(result) {
             if (!result || !result.success) alert('Ошибка сохранения порядка!');
@@ -208,9 +205,8 @@ var admin = {
     // === ОБЛОЖКА ПАПКИ ===
     setFolderCover: function() {
         if (!gallery.currentFolder) return;
-        var photoId = gallery._displayOrder ? gallery._displayOrder[gallery.currentPhotoIndex] : null;
-        if (!photoId) return;
-        var photo = gallery._photoById(photoId);
+        // ИСПРАВЛЕНО: используем visiblePhotos напрямую вместо _displayOrder
+        var photo = gallery.visiblePhotos[gallery.currentPhotoIndex];
         if (!photo) return;
 
         var folderId = gallery.currentFolder.id;
@@ -283,11 +279,13 @@ var admin = {
     },
 
     deleteCurrentPhoto: function() {
-        if (!gallery._displayOrder || !gallery.currentFolder) return;
-        var photoId = gallery._displayOrder[gallery.currentPhotoIndex];
-        if (!photoId) return;
+        if (!gallery.currentFolder) return;
+        // ИСПРАВЛЕНО: используем visiblePhotos напрямую вместо _displayOrder
+        var photo = gallery.visiblePhotos[gallery.currentPhotoIndex];
+        if (!photo) return;
         if (!confirm('Удалить это фото из альбома?')) return;
 
+        var photoId = photo.id;
         var folderId = gallery.currentFolder.id;
 
         api.deletePhoto(folderId, photoId).then(function(result) {

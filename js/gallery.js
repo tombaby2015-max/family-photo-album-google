@@ -618,14 +618,14 @@ var gallery = {
     },
 
     // ============================================================
-    // FULLSCREEN ПРОСМОТР — слайдер с пробелами между фото
+    // FULLSCREEN ПРОСМОТР — слайдер
+    // Каждый слайд = 100vw, gap задаётся через padding на слайдах.
+    // Это 100% надёжно без JS-измерений offsetWidth.
     // ============================================================
     _displayOrder: [],
 
-    // FIX 1: GAP учтён правильно — слайды имеют ширину = 100% враппера,
-    // а сам враппер растянут на (N * slideWidth + (N-1) * GAP).
-    // Слайды разделяются padding-right у каждого кроме последнего.
-    _GAP: 30,
+    // Половина пробела с каждой стороны слайда = визуальный gap между фото
+    _HALF_GAP: 15, // итоговый зазор = 30px
 
     _buildSliderDOM: function() {
         var self = this;
@@ -633,37 +633,39 @@ var gallery = {
         if (!container) return;
         container.innerHTML = '';
 
-        var count = self._displayOrder.length;
-        var gap = self._GAP;
-
-        // Враппер занимает всю ширину * количество слайдов
-        // каждый слайд = 100vw контейнера, отделён gap
+        // Враппер: overflow visible, ширина = 100%, flex
         var wrapper = document.createElement('div');
         wrapper.id = 'fv-slider-wrapper';
-        // Используем gap через column-gap + flexbox
         wrapper.style.cssText = [
             'display:flex;',
+            'width:100%;',
             'height:100%;',
             'will-change:transform;',
-            'transition:transform 0.40s cubic-bezier(0.22,0.61,0.36,1);',
-            'gap:' + gap + 'px;'
+            'transition:transform 0.40s cubic-bezier(0.22,0.61,0.36,1);'
         ].join('');
-
         container.appendChild(wrapper);
 
-        for (var i = 0; i < count; i++) {
+        var hg = self._HALF_GAP;
+
+        for (var i = 0; i < self._displayOrder.length; i++) {
             var photo = self._photoById(self._displayOrder[i]);
             var slide = document.createElement('div');
             slide.className = 'fv-slide';
-            // FIX 1: ширина слайда фиксирована = offsetWidth контейнера (100%)
-            // Применяем через JS после вставки, чтобы offsetWidth был доступен
+            // Каждый слайд = 100vw (ширина вьюпорта), независимо от контейнера.
+            // padding создаёт видимый зазор между фото.
+            // Крайние слайды — только один отступ (внутренний).
+            var pl = (i === 0) ? 0 : hg;
+            var pr = (i === self._displayOrder.length - 1) ? 0 : hg;
             slide.style.cssText = [
                 'flex-shrink:0;',
+                'width:100vw;',
                 'height:100%;',
                 'display:flex;',
                 'align-items:center;',
                 'justify-content:center;',
-                'box-sizing:border-box;'
+                'box-sizing:border-box;',
+                'padding-left:' + pl + 'px;',
+                'padding-right:' + pr + 'px;'
             ].join('');
 
             var img = document.createElement('img');
@@ -674,28 +676,11 @@ var gallery = {
             slide.appendChild(img);
             wrapper.appendChild(slide);
         }
-
-        // После вставки устанавливаем точную ширину каждого слайда
-        // равную ширине контейнера (без gap)
-        self._updateSlideWidths();
     },
 
-    // Устанавливает ширину каждого слайда = ширине контейнера
-    _updateSlideWidths: function() {
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-        if (!container) return;
-        var w = container.offsetWidth;
-        var slides = document.querySelectorAll('#fv-slider-wrapper .fv-slide');
-        slides.forEach(function(slide) {
-            slide.style.width = w + 'px';
-        });
-    },
-
-    // Шаг = ширина слайда + gap
+    // Шаг = 100vw (каждый слайд ровно 100vw)
     _slideStep: function() {
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-        var w = container ? container.offsetWidth : window.innerWidth;
-        return w + this._GAP;
+        return window.innerWidth;
     },
 
     _sliderGoTo: function(index, animate) {
@@ -714,7 +699,7 @@ var gallery = {
         var photo = this._photoById(this._displayOrder[displayIndex]);
         if (!photo) return;
 
-        // Показываем viewer до buildSliderDOM, чтобы offsetWidth был верным
+        // Показываем viewer
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'flex';
 
@@ -804,9 +789,15 @@ var gallery = {
             var dx = endX - startX;
             var step = self._slideStep();
             var newIndex = self.currentPhotoIndex;
+            var maxIndex = self._displayOrder.length - 1;
 
-            if (dx < -step * 0.2 && newIndex < self._displayOrder.length - 1) newIndex++;
-            else if (dx > step * 0.2 && newIndex > 0) newIndex--;
+            // Порог 25% ширины экрана для переключения
+            if (dx < -step * 0.25 && newIndex < maxIndex) newIndex++;
+            else if (dx > step * 0.25 && newIndex > 0) newIndex--;
+
+            // Жёсткие границы — не выходим за пределы
+            if (newIndex < 0) newIndex = 0;
+            if (newIndex > maxIndex) newIndex = maxIndex;
 
             self._changePhoto(newIndex);
         }
@@ -860,9 +851,8 @@ var gallery = {
         viewer.addEventListener('touchstart', onTapStart, { passive: true });
         viewer.addEventListener('touchend', onTapEnd, { passive: true });
 
-        // Пересчёт при повороте/ресайзе
+        // Пересчёт при повороте/ресайзе — слайды 100vw, просто пересчитываем позицию
         window.onresize = function() {
-            self._updateSlideWidths();
             self._sliderGoTo(self.currentPhotoIndex, false);
         };
     },

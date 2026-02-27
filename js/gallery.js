@@ -383,31 +383,9 @@ var gallery = {
 
     _buildDisplayOrder: function() {
         var self = this;
-        // Строим порядок так же, как _renderNormalMode:
-        // сначала фото без секции, потом по секциям в порядке self.sections
-        var sections = self.sections || [];
-
-        var bySection = {};
-        var unsectioned = [];
-        for (var i = 0; i < self.visiblePhotos.length; i++) {
-            var p = self.visiblePhotos[i];
-            if (p.section_id) {
-                if (!bySection[p.section_id]) bySection[p.section_id] = [];
-                bySection[p.section_id].push(p.id);
-            } else {
-                unsectioned.push(p.id);
-            }
-        }
-
-        var order = unsectioned.slice();
-        for (var k = 0; k < sections.length; k++) {
-            var ids = bySection[sections[k].id] || [];
-            for (var m = 0; m < ids.length; m++) {
-                order.push(ids[m]);
-            }
-        }
-
-        self._displayOrder = order;
+        // Порядок листания = порядок visiblePhotos (как пришли с сервера).
+        // Не перегруппируем по секциям — это ломало порядок.
+        self._displayOrder = self.visiblePhotos.map(function(p) { return p.id; });
     },
 
     _displayIndexById: function(photoId) {
@@ -626,12 +604,15 @@ var gallery = {
             if (checkbox) admin.togglePhotoSelection(photoId, checkbox);
             return;
         }
-        var displayIndex = this._displayIndexById(photoId);
-        if (displayIndex === -1) {
-            for (var i = 0; i < this.visiblePhotos.length; i++) {
-                if (this.visiblePhotos[i].id === photoId) { displayIndex = i; break; }
+        // Ищем индекс в visiblePhotos напрямую по id — самый надёжный способ
+        var displayIndex = -1;
+        for (var i = 0; i < this.visiblePhotos.length; i++) {
+            if (this.visiblePhotos[i].id === photoId) {
+                displayIndex = i;
+                break;
             }
         }
+        if (displayIndex === -1) return;
         this.openFullscreen(displayIndex);
     },
 
@@ -665,15 +646,15 @@ var gallery = {
 
         var hg = self._HALF_GAP;
 
-        for (var i = 0; i < self._displayOrder.length; i++) {
-            var photo = self._photoById(self._displayOrder[i]);
+        for (var i = 0; i < self.visiblePhotos.length; i++) {
+            var photo = self.visiblePhotos[i];
             var slide = document.createElement('div');
             slide.className = 'fv-slide';
             // Каждый слайд = 100vw (ширина вьюпорта), независимо от контейнера.
             // padding создаёт видимый зазор между фото.
             // Крайние слайды — только один отступ (внутренний).
             var pl = (i === 0) ? 0 : hg;
-            var pr = (i === self._displayOrder.length - 1) ? 0 : hg;
+            var pr = (i === self.visiblePhotos.length - 1) ? 0 : hg;
             slide.style.cssText = [
                 'flex-shrink:0;',
                 'width:100vw;',
@@ -711,10 +692,10 @@ var gallery = {
     },
 
     openFullscreen: function(displayIndex) {
-        if (!this._displayOrder || displayIndex < 0 || displayIndex >= this._displayOrder.length) return;
+        if (displayIndex < 0 || displayIndex >= this.visiblePhotos.length) return;
 
         this.currentPhotoIndex = displayIndex;
-        var photo = this._photoById(this._displayOrder[displayIndex]);
+        var photo = this.visiblePhotos[displayIndex];
         if (!photo) return;
 
         // Показываем viewer
@@ -754,10 +735,10 @@ var gallery = {
     },
 
     _changePhoto: function(newIndex) {
-        if (!this._displayOrder || newIndex < 0 || newIndex >= this._displayOrder.length) return;
+        if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
         this.currentPhotoIndex = newIndex;
         this._sliderGoTo(newIndex, true);
-        var photo = this._photoById(this._displayOrder[newIndex]);
+        var photo = this.visiblePhotos[newIndex];
         var link = document.getElementById('download-link');
         if (link && photo) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
     },
@@ -807,7 +788,7 @@ var gallery = {
             var dx = endX - startX;
             var step = self._slideStep();
             var newIndex = self.currentPhotoIndex;
-            var maxIndex = self._displayOrder.length - 1;
+            var maxIndex = self.visiblePhotos.length - 1;
 
             // Порог 25% ширины экрана для переключения
             if (dx < -step * 0.25 && newIndex < maxIndex) newIndex++;
@@ -891,7 +872,7 @@ var gallery = {
     },
 
     nextPhoto: function() {
-        if (this._displayOrder && this.currentPhotoIndex < this._displayOrder.length - 1)
+        if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
             this._changePhoto(this.currentPhotoIndex + 1);
     },
 

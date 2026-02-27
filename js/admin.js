@@ -114,6 +114,7 @@ var admin = {
                     msg += '\nУдалено папок: ' + (result.deletedFolders || 0) + '\nУдалено фото: ' + (result.deletedPhotos || 0);
                 }
                 alert(msg);
+                gallery.clearFoldersCache();
                 gallery.loadFolders();
             } else {
                 alert('❌ Ошибка: ' + (result.error || 'Неизвестная ошибка'));
@@ -653,6 +654,7 @@ var admin = {
                     api.restoreBackup(data).then(function(result) {
                         if (result.success) {
                             alert('♻️ Восстановлено!\nПапок: ' + result.restoredFolders + '\nФото: ' + result.restoredPhotos);
+                            gallery.clearFoldersCache();
                             gallery.loadFolders();
                         } else {
                             alert('❌ Ошибка: ' + (result.error || 'unknown'));
@@ -742,6 +744,7 @@ var admin = {
                 if (result.success) {
                     alert('✅ Хранилище очищено\nПапок: ' + result.deletedFolders + '\nФото: ' + result.deletedPhotos);
                     self.closeClearStorageModal();
+                    gallery.clearFoldersCache();
                     gallery.loadFolders();
                 } else {
                     alert('❌ Ошибка: ' + (result.error || 'unknown'));

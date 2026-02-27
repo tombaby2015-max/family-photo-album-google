@@ -383,13 +383,31 @@ var gallery = {
 
     _buildDisplayOrder: function() {
         var self = this;
-        self._displayOrder = [];
+        // Строим порядок так же, как _renderNormalMode:
+        // сначала фото без секции, потом по секциям в порядке self.sections
+        var sections = self.sections || [];
 
-        var items = document.querySelectorAll('#photos-container .photo-item');
-        items.forEach(function(el) {
-            var id = el.getAttribute('data-id');
-            if (id) self._displayOrder.push(id);
-        });
+        var bySection = {};
+        var unsectioned = [];
+        for (var i = 0; i < self.visiblePhotos.length; i++) {
+            var p = self.visiblePhotos[i];
+            if (p.section_id) {
+                if (!bySection[p.section_id]) bySection[p.section_id] = [];
+                bySection[p.section_id].push(p.id);
+            } else {
+                unsectioned.push(p.id);
+            }
+        }
+
+        var order = unsectioned.slice();
+        for (var k = 0; k < sections.length; k++) {
+            var ids = bySection[sections[k].id] || [];
+            for (var m = 0; m < ids.length; m++) {
+                order.push(ids[m]);
+            }
+        }
+
+        self._displayOrder = order;
     },
 
     _displayIndexById: function(photoId) {

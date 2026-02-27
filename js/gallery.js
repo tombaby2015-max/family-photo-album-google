@@ -230,6 +230,7 @@ var gallery = {
         this.currentPhotos = [];
         this.visiblePhotos = [];
         this.sectionModeActive = false;
+        this._sliderBuilt = false; // сбрасываем слайдер при открытии новой папки
 
         document.getElementById('main-page').style.display = 'none';
         document.getElementById('rec-cover').style.display = 'none';
@@ -617,56 +618,37 @@ var gallery = {
     },
 
     // ============================================================
-    // FULLSCREEN ПРОСМОТР — слайдер
-    // Каждый слайд = 100vw, gap задаётся через padding на слайдах.
-    // Это 100% надёжно без JS-измерений offsetWidth.
+    // ============================================================
+    // FULLSCREEN ПРОСМОТР
+    // Слайдер строится ОДИН РАЗ при loadPhotos.
+    // openFullscreen только показывает viewer и позиционирует.
+    // Свайп инициализируется ОДИН РАЗ при DOMContentLoaded.
     // ============================================================
     _displayOrder: [],
+    _HALF_GAP: 15,
+    _sliderBuilt: false,
 
-    // Половина пробела с каждой стороны слайда = визуальный gap между фото
-    _HALF_GAP: 15, // итоговый зазор = 30px
-
+    // Вызывается после загрузки всех фото — строит слайдер один раз
     _buildSliderDOM: function() {
         var self = this;
         var container = document.querySelector('.fullscreen-viewer__image-container');
         if (!container) return;
         container.innerHTML = '';
+        self._sliderBuilt = true;
 
-        // Враппер: overflow visible, ширина = 100%, flex
         var wrapper = document.createElement('div');
         wrapper.id = 'fv-slider-wrapper';
-        wrapper.style.cssText = [
-            'display:flex;',
-            'width:100%;',
-            'height:100%;',
-            'will-change:transform;',
-            'transition:transform 0.40s cubic-bezier(0.22,0.61,0.36,1);'
-        ].join('');
+        wrapper.style.cssText = 'display:flex;width:100%;height:100%;will-change:transform;transition:transform 0.40s cubic-bezier(0.22,0.61,0.36,1);';
         container.appendChild(wrapper);
 
         var hg = self._HALF_GAP;
-
         for (var i = 0; i < self.visiblePhotos.length; i++) {
             var photo = self.visiblePhotos[i];
             var slide = document.createElement('div');
             slide.className = 'fv-slide';
-            // Каждый слайд = 100vw (ширина вьюпорта), независимо от контейнера.
-            // padding создаёт видимый зазор между фото.
-            // Крайние слайды — только один отступ (внутренний).
             var pl = (i === 0) ? 0 : hg;
             var pr = (i === self.visiblePhotos.length - 1) ? 0 : hg;
-            slide.style.cssText = [
-                'flex-shrink:0;',
-                'width:100vw;',
-                'height:100%;',
-                'display:flex;',
-                'align-items:center;',
-                'justify-content:center;',
-                'box-sizing:border-box;',
-                'padding-left:' + pl + 'px;',
-                'padding-right:' + pr + 'px;'
-            ].join('');
-
+            slide.style.cssText = 'flex-shrink:0;width:100vw;height:100%;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding-left:' + pl + 'px;padding-right:' + pr + 'px;';
             var img = document.createElement('img');
             img.src = photo ? (photo.thumbUrl || '') : '';
             img.alt = '';
@@ -677,7 +659,6 @@ var gallery = {
         }
     },
 
-    // Шаг = 100vw (каждый слайд ровно 100vw)
     _slideStep: function() {
         return window.innerWidth;
     },
@@ -698,28 +679,17 @@ var gallery = {
         var photo = this.visiblePhotos[displayIndex];
         if (!photo) return;
 
-        // Показываем viewer
+        // Строим слайдер только при первом открытии для текущей папки
+        if (!this._sliderBuilt) {
+            this._buildSliderDOM();
+        }
+
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'flex';
 
-        this._buildSliderDOM();
         this._sliderGoTo(displayIndex, false);
 
-        var actionsPanel = document.getElementById('fullscreen-actions');
-        if (actionsPanel) {
-            var isAdmin = api.isAdmin();
-            actionsPanel.innerHTML =
-                (isAdmin ?
-                    '<button class="fv-action-btn" onclick="admin.setFolderCover()" title="Превью папки">' +
-                    '<i data-lucide="image"></i><span>Обложка</span></button>' : '') +
-                '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + (photo.name || 'photo.jpg') + '" title="Скачать оригинал">' +
-                '<i data-lucide="download"></i><span>Скачать</span></a>' +
-                (isAdmin ?
-                    '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()" title="Удалить">' +
-                    '<i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
-                '<button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">' +
-                '<i data-lucide="x"></i><span>Закрыть</span></button>';
-        }
+        this._updateActionsPanel(photo);
 
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
@@ -731,7 +701,23 @@ var gallery = {
             else if (e.key === 'ArrowRight') self.nextPhoto();
         };
         document.addEventListener('keydown', this.keyHandler);
-        this._initSliderSwipe();
+    },
+
+    _updateActionsPanel: function(photo) {
+        var actionsPanel = document.getElementById('fullscreen-actions');
+        if (!actionsPanel) return;
+        var isAdmin = api.isAdmin();
+        actionsPanel.innerHTML =
+            (isAdmin ?
+                '<button class="fv-action-btn" onclick="admin.setFolderCover()" title="Превью папки">' +
+                '<i data-lucide="image"></i><span>Обложка</span></button>' : '') +
+            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + (photo.name || 'photo.jpg') + '" title="Скачать оригинал">' +
+            '<i data-lucide="download"></i><span>Скачать</span></a>' +
+            (isAdmin ?
+                '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()" title="Удалить">' +
+                '<i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
+            '<button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">' +
+            '<i data-lucide="x"></i><span>Закрыть</span></button>';
     },
 
     _changePhoto: function(newIndex) {
@@ -743,13 +729,14 @@ var gallery = {
         if (link && photo) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
     },
 
-    _initSliderSwipe: function() {
+    // Вызывается ОДИН РАЗ при DOMContentLoaded
+    initSliderSwipe: function() {
         var self = this;
         var viewer = document.getElementById('fullscreen-viewer');
         if (!viewer) return;
 
-        var startX = 0, startY = 0, isDragging = false, baseTranslate = 0;
-        var movedX = 0; // FIX 2: отслеживаем реальное смещение для различия тап/свайп
+        var startX = 0, startY = 0, isDragging = false, baseTranslate = 0, movedX = 0;
+        var tapStartX = 0, tapStartY = 0, tapStartTime = 0;
 
         function getClientX(e) { return e.touches ? e.touches[0].clientX : e.clientX; }
         function getClientY(e) { return e.touches ? e.touches[0].clientY : e.clientY; }
@@ -769,7 +756,6 @@ var gallery = {
             if (!isDragging) return;
             var dx = getClientX(e) - startX;
             var dy = getClientY(e) - startY;
-            // Если движение вертикальное — отменяем свайп
             if (Math.abs(dy) > Math.abs(dx) && Math.abs(movedX) < 5) {
                 isDragging = false;
                 return;
@@ -783,27 +769,17 @@ var gallery = {
         function onEnd(e) {
             if (!isDragging) return;
             isDragging = false;
-
             var endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
             var dx = endX - startX;
             var step = self._slideStep();
             var newIndex = self.currentPhotoIndex;
             var maxIndex = self.visiblePhotos.length - 1;
-
-            // Порог 25% ширины экрана для переключения
             if (dx < -step * 0.25 && newIndex < maxIndex) newIndex++;
             else if (dx > step * 0.25 && newIndex > 0) newIndex--;
-
-            // Жёсткие границы — не выходим за пределы
             if (newIndex < 0) newIndex = 0;
             if (newIndex > maxIndex) newIndex = maxIndex;
-
             self._changePhoto(newIndex);
         }
-
-        // FIX 2: Тап по краям — надёжная реализация через touchstart/touchend
-        // (не через onclick, который ненадёжен на мобильных после свайпа)
-        var tapStartX = 0, tapStartY = 0, tapStartTime = 0;
 
         function onTapStart(e) {
             if (e.target.closest && (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav'))) return;
@@ -814,52 +790,37 @@ var gallery = {
 
         function onTapEnd(e) {
             if (e.target.closest && (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav'))) return;
-
             var dt = Date.now() - tapStartTime;
             var dx = Math.abs(e.changedTouches[0].clientX - tapStartX);
             var dy = Math.abs(e.changedTouches[0].clientY - tapStartY);
-
-            // Это тап: короткий (< 300мс), без движения (< 15px)
             if (dt < 300 && dx < 15 && dy < 15) {
                 var rect = viewer.getBoundingClientRect();
                 var tapX = e.changedTouches[0].clientX - rect.left;
-                var zone = rect.width * 0.25; // 25% с каждого края
-
-                if (tapX < zone) {
-                    self.prevPhoto();
-                } else if (tapX > rect.width - zone) {
-                    self.nextPhoto();
-                }
-                // Центр экрана — не делаем ничего (закрытие убрано, т.к. мешает просмотру)
+                var zone = rect.width * 0.25;
+                if (tapX < zone) self.prevPhoto();
+                else if (tapX > rect.width - zone) self.nextPhoto();
             }
         }
 
-        // Mouse события (десктоп)
         viewer.onmousedown = onStart;
         viewer.onmousemove = onMove;
         viewer.onmouseup = onEnd;
         viewer.onmouseleave = onEnd;
-
-        // Touch события (мобильные) — свайп
         viewer.ontouchstart = onStart;
         viewer.ontouchmove = onMove;
         viewer.ontouchend = onEnd;
         viewer.ontouchcancel = onEnd;
-
-        // FIX 2: Отдельные обработчики для тапа на мобильных
         viewer.addEventListener('touchstart', onTapStart, { passive: true });
         viewer.addEventListener('touchend', onTapEnd, { passive: true });
 
-        // Пересчёт при повороте/ресайзе — слайды 100vw, просто пересчитываем позицию
-        window.onresize = function() {
+        window.addEventListener('resize', function() {
             self._sliderGoTo(self.currentPhotoIndex, false);
-        };
+        });
     },
 
     closeFullscreen: function() {
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'none';
-        this._animating = false;
         if (this.keyHandler) {
             document.removeEventListener('keydown', this.keyHandler);
             this.keyHandler = null;
@@ -876,7 +837,7 @@ var gallery = {
             this._changePhoto(this.currentPhotoIndex + 1);
     },
 
-    showMainPage: function() {
+        showMainPage: function() {
         if (typeof admin !== 'undefined' && admin.isSelectionMode) {
             admin.exitSelectionMode();
         }
@@ -906,6 +867,7 @@ var gallery = {
 
 document.addEventListener('DOMContentLoaded', function() {
     gallery.init();
+    gallery.initSliderSwipe(); // свайп инициализируется один раз
 });
 
 function scrollToFolders() {

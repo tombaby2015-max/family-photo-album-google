@@ -17,6 +17,14 @@
     <link rel="stylesheet" href="https://static.tildacdn.ink/css/tilda-cards-1.0.min.css" type="text/css" media="all" />
     <link rel="stylesheet" href="https://static.tildacdn.ink/css/fonts-tildasans.css" type="text/css" media="all" />
 
+    <!-- PWA: добавление на рабочий стол / главный экран -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Фотоальбом">
+    <link rel="apple-touch-icon" href="https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg">
+
     <!-- Наши стили -->
     <link rel="stylesheet" href="css/custom.css" type="text/css" media="all" />
 
@@ -91,7 +99,32 @@
             </div>
         </div>
 
-        <!-- ПАПКИ -->
+        <!-- КНОПКА "ДОБАВИТЬ НА ЭКРАН" (только для гостей, скрывается после установки) -->
+    <div id="pwa-install-bar" style="display:none;">
+        <div class="t-container">
+            <div class="t-col t-col_12" style="text-align:center; padding: 20px 0 10px;">
+                <button id="pwa-install-btn" onclick="pwa.install()" style="
+                    display:inline-flex; align-items:center; gap:10px;
+                    padding:14px 28px; border-radius:50px;
+                    background:rgba(255,255,255,0.15); backdrop-filter:blur(10px);
+                    border:1px solid rgba(255,255,255,0.3); color:#fff;
+                    font-size:15px; cursor:pointer; transition:all 0.2s;
+                " onmouseover="this.style.background='rgba(255,255,255,0.25)'"
+                   onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v13M5 9l7 7 7-7"/><path d="M3 20h18"/></svg>
+                    Добавить на главный экран
+                </button>
+                <!-- Подсказка для Safari/iPhone — показывается вместо кнопки -->
+                <div id="pwa-safari-hint" style="display:none; color:rgba(255,255,255,0.85); font-size:14px; line-height:1.6;">
+                    Нажмите <strong>Поделиться</strong> 
+                    <svg style="display:inline;vertical-align:middle;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                    → <strong>На экран «Домой»</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ПАПКИ -->
         <div id="rec-folders" class="r t-rec t-rec_pt_30" style="padding-top:30px;" data-record-type="147">
             <div class="t214">
                 <ul id="folders-container" class="t214__container t-card__container t-container t-container_flex">
@@ -150,6 +183,7 @@
                         <button class="admin-btn" id="btn-select-all" onclick="admin.toggleSelectAll()" style="width:100%;">Выбрать все</button>
                         <button class="admin-btn danger" id="btn-delete-selected" onclick="admin.deleteSelectedPhotos()" disabled style="width:100%;opacity:0.5;">Удалить выбранные (0)</button>
                         <button class="admin-btn" id="btn-hide-selected" onclick="admin.hideSelectedPhotos(true)" disabled style="width:100%;opacity:0.5;">Скрыть выбранные (0)</button>
+                        <button class="admin-btn" id="btn-move-to-section" onclick="admin.moveSelectedToSection()" disabled style="width:100%;opacity:0.5;display:none;">📂 Переместить в секцию</button>
                         <button class="admin-btn" onclick="admin.exitSelectionMode()" style="width:100%;">✕ Отмена</button>
                     </div>
                 </div>
@@ -215,6 +249,62 @@
             <a href="#" onclick="admin.openModal(); return false;" style="display:inline-block;padding:10px 20px;font-size:13px;border-radius:50px;background-color:#fff;color:#000;text-decoration:none;margin:20px 0;">Админ</a>
         </div>
     </div>
+
+    <!-- PWA скрипт -->
+    <script>
+    var pwa = {
+        _deferredPrompt: null,
+
+        init: function() {
+            var self = this;
+            var bar = document.getElementById('pwa-install-bar');
+            var btn = document.getElementById('pwa-install-btn');
+            var safariHint = document.getElementById('pwa-safari-hint');
+
+            // Не показываем если уже установлено
+            if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
+
+            // Не показываем администратору
+            if (localStorage.getItem('admin_token')) return;
+
+            // Chrome / Android / Edge — ловим событие установки
+            window.addEventListener('beforeinstallprompt', function(e) {
+                e.preventDefault();
+                self._deferredPrompt = e;
+                if (bar) bar.style.display = 'block';
+                if (safariHint) safariHint.style.display = 'none';
+                if (btn) btn.style.display = 'inline-flex';
+            });
+
+            // Safari на iPhone — показываем подсказку вручную
+            var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+            var isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            if (isIos && isSafari) {
+                if (bar) bar.style.display = 'block';
+                if (btn) btn.style.display = 'none';
+                if (safariHint) safariHint.style.display = 'block';
+            }
+
+            // Скрываем после успешной установки
+            window.addEventListener('appinstalled', function() {
+                if (bar) bar.style.display = 'none';
+                self._deferredPrompt = null;
+            });
+        },
+
+        install: function() {
+            if (!this._deferredPrompt) return;
+            this._deferredPrompt.prompt();
+            this._deferredPrompt.userChoice.then(function(result) {
+                var bar = document.getElementById('pwa-install-bar');
+                if (bar) bar.style.display = 'none';
+            });
+            this._deferredPrompt = null;
+        }
+    };
+
+    document.addEventListener('DOMContentLoaded', function() { pwa.init(); });
+    </script>
 
     <!-- Скрипты -->
     <script src="js/api.js?v=3"></script>

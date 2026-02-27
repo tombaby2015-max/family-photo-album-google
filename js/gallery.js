@@ -631,6 +631,8 @@ var gallery = {
     _displayOrder: [], // id фото в визуальном порядке
 
     // Строит DOM ленты: по одному слайду на каждое фото в _displayOrder
+    _GAP: 20, // пикселей между слайдами
+
     _buildSliderDOM: function() {
         var self = this;
         var container = document.querySelector('.fullscreen-viewer__image-container');
@@ -643,7 +645,12 @@ var gallery = {
         for (var i = 0; i < self._displayOrder.length; i++) {
             var photo = self._photoById(self._displayOrder[i]);
             var slide = document.createElement('div');
-            slide.style.cssText = 'flex-shrink:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;';
+            // Каждый слайд = ширина контейнера, gap добавляем как margin-right (кроме последнего)
+            slide.className = 'fv-slide';
+            slide.style.cssText = 'flex-shrink:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;box-sizing:border-box;';
+            if (i < self._displayOrder.length - 1) {
+                slide.style.marginRight = self._GAP + 'px';
+            }
             var img = document.createElement('img');
             img.src = photo ? (photo.thumbUrl || '') : '';
             img.alt = '';
@@ -654,15 +661,20 @@ var gallery = {
         }
     },
 
+    // Шаг прокрутки = ширина слайда + gap
+    _slideStep: function() {
+        var container = document.querySelector('.fullscreen-viewer__image-container');
+        var w = container ? container.offsetWidth : window.innerWidth;
+        return w + this._GAP;
+    },
+
     _sliderGoTo: function(index, animate) {
         var wrapper = document.getElementById('fv-slider-wrapper');
         if (!wrapper) return;
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-        var w = container ? container.offsetWidth : window.innerWidth;
         wrapper.style.transition = animate
             ? 'transform 0.40s cubic-bezier(0.22,0.61,0.36,1)'
             : 'none';
-        wrapper.style.transform = 'translateX(' + (-index * w) + 'px)';
+        wrapper.style.transform = 'translateX(' + (-index * this._slideStep()) + 'px)';
     },
 
     openFullscreen: function(displayIndex) {
@@ -736,9 +748,7 @@ var gallery = {
             isDragging = true;
             var wrapper = document.getElementById('fv-slider-wrapper');
             if (wrapper) wrapper.style.transition = 'none';
-            var container = document.querySelector('.fullscreen-viewer__image-container');
-            var w = container ? container.offsetWidth : window.innerWidth;
-            baseTranslate = -self.currentPhotoIndex * w;
+            baseTranslate = -self.currentPhotoIndex * self._slideStep();
         }
         function onMove(e) {
             if (!isDragging) return;
@@ -754,11 +764,10 @@ var gallery = {
             isDragging = false;
             var endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
             var dx = endX - startX;
-            var container = document.querySelector('.fullscreen-viewer__image-container');
-            var w = container ? container.offsetWidth : window.innerWidth;
+            var step = self._slideStep();
             var newIndex = self.currentPhotoIndex;
-            if (dx < -w * 0.25 && newIndex < self._displayOrder.length - 1) newIndex++;
-            else if (dx > w * 0.25 && newIndex > 0) newIndex--;
+            if (dx < -step * 0.25 && newIndex < self._displayOrder.length - 1) newIndex++;
+            else if (dx > step * 0.25 && newIndex > 0) newIndex--;
             self._changePhoto(newIndex);
         }
 
@@ -770,6 +779,21 @@ var gallery = {
         viewer.ontouchmove = onMove;
         viewer.ontouchend = onEnd;
         viewer.ontouchcancel = onEnd;
+
+        // Тап по краю — пролистывание (для мобильных где нет стрелок)
+        viewer.onclick = function(e) {
+            if (e.target.closest && (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav'))) return;
+            // Если это был свайп — не реагируем на click
+            if (Math.abs(getClientX(e) - startX) > 10) return;
+            var rect = viewer.getBoundingClientRect();
+            var tapX = e.clientX - rect.left;
+            var zone = rect.width * 0.25; // 25% с каждого края
+            if (tapX < zone) {
+                self.prevPhoto();
+            } else if (tapX > rect.width - zone) {
+                self.nextPhoto();
+            }
+        };
 
         window.onresize = function() { self._sliderGoTo(self.currentPhotoIndex, false); };
     },

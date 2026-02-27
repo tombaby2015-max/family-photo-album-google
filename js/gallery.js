@@ -230,7 +230,6 @@ var gallery = {
         this.currentPhotos = [];
         this.visiblePhotos = [];
         this.sectionModeActive = false;
-        this._sliderBuilt = false; // сбрасываем слайдер при открытии новой папки
 
         document.getElementById('main-page').style.display = 'none';
         document.getElementById('rec-cover').style.display = 'none';
@@ -620,77 +619,22 @@ var gallery = {
     // ============================================================
     // ============================================================
     // FULLSCREEN ПРОСМОТР
-    // Слайдер строится ОДИН РАЗ при loadPhotos.
-    // openFullscreen только показывает viewer и позиционирует.
-    // Свайп инициализируется ОДИН РАЗ при DOMContentLoaded.
+    // Одна <img>, меняем src. Свайп только добавляет жест.
+    // Порядок = visiblePhotos[0..N] — никакой дополнительной логики.
     // ============================================================
-    _displayOrder: [],
-    _HALF_GAP: 15,
-    _sliderBuilt: false,
 
-    // Вызывается после загрузки всех фото — строит слайдер один раз
-    _buildSliderDOM: function() {
-        var self = this;
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-        if (!container) return;
-        container.innerHTML = '';
-        self._sliderBuilt = true;
-
-        var wrapper = document.createElement('div');
-        wrapper.id = 'fv-slider-wrapper';
-        wrapper.style.cssText = 'display:flex;width:100%;height:100%;will-change:transform;transition:transform 0.40s cubic-bezier(0.22,0.61,0.36,1);';
-        container.appendChild(wrapper);
-
-        var hg = self._HALF_GAP;
-        for (var i = 0; i < self.visiblePhotos.length; i++) {
-            var photo = self.visiblePhotos[i];
-            var slide = document.createElement('div');
-            slide.className = 'fv-slide';
-            var pl = (i === 0) ? 0 : hg;
-            var pr = (i === self.visiblePhotos.length - 1) ? 0 : hg;
-            slide.style.cssText = 'flex-shrink:0;width:100vw;height:100%;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding-left:' + pl + 'px;padding-right:' + pr + 'px;';
-            var img = document.createElement('img');
-            img.src = photo ? (photo.thumbUrl || '') : '';
-            img.alt = '';
-            img.draggable = false;
-            img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;pointer-events:none;border-radius:4px;';
-            slide.appendChild(img);
-            wrapper.appendChild(slide);
-        }
-    },
-
-    _slideStep: function() {
-        return window.innerWidth;
-    },
-
-    _sliderGoTo: function(index, animate) {
-        var wrapper = document.getElementById('fv-slider-wrapper');
-        if (!wrapper) return;
-        wrapper.style.transition = animate
-            ? 'transform 0.40s cubic-bezier(0.22,0.61,0.36,1)'
-            : 'none';
-        wrapper.style.transform = 'translateX(' + (-index * this._slideStep()) + 'px)';
-    },
-
-    openFullscreen: function(displayIndex) {
-        if (displayIndex < 0 || displayIndex >= this.visiblePhotos.length) return;
-
-        this.currentPhotoIndex = displayIndex;
-        var photo = this.visiblePhotos[displayIndex];
-        if (!photo) return;
-
-        // Строим слайдер только при первом открытии для текущей папки
-        if (!this._sliderBuilt) {
-            this._buildSliderDOM();
-        }
+    openFullscreen: function(index) {
+        if (index < 0 || index >= this.visiblePhotos.length) return;
+        this.currentPhotoIndex = index;
 
         var viewer = document.getElementById('fullscreen-viewer');
-        if (viewer) viewer.style.display = 'flex';
+        var img = document.getElementById('fv-main-img');
+        if (!viewer || !img) return;
 
-        this._sliderGoTo(displayIndex, false);
+        img.src = this.visiblePhotos[index].thumbUrl || '';
+        viewer.style.display = 'flex';
 
-        this._updateActionsPanel(photo);
-
+        this._updateActionsPanel(this.visiblePhotos[index]);
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
         var self = this;
@@ -703,119 +647,24 @@ var gallery = {
         document.addEventListener('keydown', this.keyHandler);
     },
 
+    _goToPhoto: function(index) {
+        if (index < 0 || index >= this.visiblePhotos.length) return;
+        this.currentPhotoIndex = index;
+        var img = document.getElementById('fv-main-img');
+        if (img) img.src = this.visiblePhotos[index].thumbUrl || '';
+        this._updateActionsPanel(this.visiblePhotos[index]);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    },
+
     _updateActionsPanel: function(photo) {
-        var actionsPanel = document.getElementById('fullscreen-actions');
-        if (!actionsPanel) return;
+        var panel = document.getElementById('fullscreen-actions');
+        if (!panel) return;
         var isAdmin = api.isAdmin();
-        actionsPanel.innerHTML =
-            (isAdmin ?
-                '<button class="fv-action-btn" onclick="admin.setFolderCover()" title="Превью папки">' +
-                '<i data-lucide="image"></i><span>Обложка</span></button>' : '') +
-            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + (photo.name || 'photo.jpg') + '" title="Скачать оригинал">' +
-            '<i data-lucide="download"></i><span>Скачать</span></a>' +
-            (isAdmin ?
-                '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()" title="Удалить">' +
-                '<i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
-            '<button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">' +
-            '<i data-lucide="x"></i><span>Закрыть</span></button>';
-    },
-
-    _changePhoto: function(newIndex) {
-        if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
-        this.currentPhotoIndex = newIndex;
-        this._sliderGoTo(newIndex, true);
-        var photo = this.visiblePhotos[newIndex];
-        var link = document.getElementById('download-link');
-        if (link && photo) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
-    },
-
-    // Вызывается ОДИН РАЗ при DOMContentLoaded
-    initSliderSwipe: function() {
-        var self = this;
-        var viewer = document.getElementById('fullscreen-viewer');
-        if (!viewer) return;
-
-        var startX = 0, startY = 0, isDragging = false, baseTranslate = 0, movedX = 0;
-        var tapStartX = 0, tapStartY = 0, tapStartTime = 0;
-
-        function getClientX(e) { return e.touches ? e.touches[0].clientX : e.clientX; }
-        function getClientY(e) { return e.touches ? e.touches[0].clientY : e.clientY; }
-
-        function onStart(e) {
-            if (e.target.closest && (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav'))) return;
-            startX = getClientX(e);
-            startY = getClientY(e);
-            movedX = 0;
-            isDragging = true;
-            var wrapper = document.getElementById('fv-slider-wrapper');
-            if (wrapper) wrapper.style.transition = 'none';
-            baseTranslate = -self.currentPhotoIndex * self._slideStep();
-        }
-
-        function onMove(e) {
-            if (!isDragging) return;
-            var dx = getClientX(e) - startX;
-            var dy = getClientY(e) - startY;
-            if (Math.abs(dy) > Math.abs(dx) && Math.abs(movedX) < 5) {
-                isDragging = false;
-                return;
-            }
-            e.preventDefault();
-            movedX = dx;
-            var wrapper = document.getElementById('fv-slider-wrapper');
-            if (wrapper) wrapper.style.transform = 'translateX(' + (baseTranslate + dx) + 'px)';
-        }
-
-        function onEnd(e) {
-            if (!isDragging) return;
-            isDragging = false;
-            var endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX;
-            var dx = endX - startX;
-            var step = self._slideStep();
-            var newIndex = self.currentPhotoIndex;
-            var maxIndex = self.visiblePhotos.length - 1;
-            if (dx < -step * 0.25 && newIndex < maxIndex) newIndex++;
-            else if (dx > step * 0.25 && newIndex > 0) newIndex--;
-            if (newIndex < 0) newIndex = 0;
-            if (newIndex > maxIndex) newIndex = maxIndex;
-            self._changePhoto(newIndex);
-        }
-
-        function onTapStart(e) {
-            if (e.target.closest && (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav'))) return;
-            tapStartX = e.touches[0].clientX;
-            tapStartY = e.touches[0].clientY;
-            tapStartTime = Date.now();
-        }
-
-        function onTapEnd(e) {
-            if (e.target.closest && (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav'))) return;
-            var dt = Date.now() - tapStartTime;
-            var dx = Math.abs(e.changedTouches[0].clientX - tapStartX);
-            var dy = Math.abs(e.changedTouches[0].clientY - tapStartY);
-            if (dt < 300 && dx < 15 && dy < 15) {
-                var rect = viewer.getBoundingClientRect();
-                var tapX = e.changedTouches[0].clientX - rect.left;
-                var zone = rect.width * 0.25;
-                if (tapX < zone) self.prevPhoto();
-                else if (tapX > rect.width - zone) self.nextPhoto();
-            }
-        }
-
-        viewer.onmousedown = onStart;
-        viewer.onmousemove = onMove;
-        viewer.onmouseup = onEnd;
-        viewer.onmouseleave = onEnd;
-        viewer.ontouchstart = onStart;
-        viewer.ontouchmove = onMove;
-        viewer.ontouchend = onEnd;
-        viewer.ontouchcancel = onEnd;
-        viewer.addEventListener('touchstart', onTapStart, { passive: true });
-        viewer.addEventListener('touchend', onTapEnd, { passive: true });
-
-        window.addEventListener('resize', function() {
-            self._sliderGoTo(self.currentPhotoIndex, false);
-        });
+        panel.innerHTML =
+            (isAdmin ? '<button class="fv-action-btn" onclick="admin.setFolderCover()"><i data-lucide="image"></i><span>Обложка</span></button>' : '') +
+            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + (photo.name || 'photo.jpg') + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
+            (isAdmin ? '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()"><i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
+            '<button class="fv-action-btn" onclick="gallery.closeFullscreen()"><i data-lucide="x"></i><span>Закрыть</span></button>';
     },
 
     closeFullscreen: function() {
@@ -829,12 +678,52 @@ var gallery = {
 
     prevPhoto: function() {
         if (this.currentPhotoIndex > 0)
-            this._changePhoto(this.currentPhotoIndex - 1);
+            this._goToPhoto(this.currentPhotoIndex - 1);
     },
 
     nextPhoto: function() {
         if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
-            this._changePhoto(this.currentPhotoIndex + 1);
+            this._goToPhoto(this.currentPhotoIndex + 1);
+    },
+
+    // Инициализируется ОДИН РАЗ при DOMContentLoaded
+    initSwipe: function() {
+        var self = this;
+        var viewer = document.getElementById('fullscreen-viewer');
+        if (!viewer) return;
+
+        var startX = 0, startY = 0, moved = false;
+
+        viewer.addEventListener('touchstart', function(e) {
+            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            moved = false;
+        }, { passive: true });
+
+        viewer.addEventListener('touchend', function(e) {
+            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+            var dx = e.changedTouches[0].clientX - startX;
+            var dy = e.changedTouches[0].clientY - startY;
+
+            // Игнорируем вертикальные жесты
+            if (Math.abs(dy) > Math.abs(dx)) return;
+
+            var W = window.innerWidth;
+
+            if (Math.abs(dx) < 15) {
+                // Тап — навигация по зонам экрана
+                var tapX = e.changedTouches[0].clientX;
+                if (tapX < W * 0.25) self.prevPhoto();
+                else if (tapX > W * 0.75) self.nextPhoto();
+            } else if (dx < -W * 0.2) {
+                // Свайп влево — следующее
+                self.nextPhoto();
+            } else if (dx > W * 0.2) {
+                // Свайп вправо — предыдущее
+                self.prevPhoto();
+            }
+        }, { passive: true });
     },
 
         showMainPage: function() {
@@ -867,7 +756,7 @@ var gallery = {
 
 document.addEventListener('DOMContentLoaded', function() {
     gallery.init();
-    gallery.initSliderSwipe(); // свайп инициализируется один раз
+    gallery.initSwipe();
 });
 
 function scrollToFolders() {

@@ -673,6 +673,11 @@ var gallery = {
         if (!photo) return;
 
         this._buildSliderDOM();
+
+        // Сначала показываем viewer — иначе offsetWidth=0 и translateX считается неверно
+        var viewer = document.getElementById('fullscreen-viewer');
+        if (viewer) viewer.style.display = 'flex';
+
         this._sliderGoTo(displayIndex, false);
 
         var actionsPanel = document.getElementById('fullscreen-actions');
@@ -690,9 +695,6 @@ var gallery = {
                 '<button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">' +
                 '<i data-lucide="x"></i><span>Закрыть</span></button>';
         }
-
-        var viewer = document.getElementById('fullscreen-viewer');
-        if (viewer) viewer.style.display = 'flex';
 
         if (typeof lucide !== 'undefined') lucide.createIcons();
 

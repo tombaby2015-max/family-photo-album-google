@@ -428,24 +428,61 @@ var admin = {
                 animation: 150,
                 ghostClass: 'sortable-ghost',
                 dragClass: 'sortable-drag',
+                onStart: function(evt) {
+                    // Если тащим выбранное фото — подсвечиваем все остальные выбранные
+                    var draggedId = evt.item.getAttribute('data-id');
+                    if (self.isSelectionMode && self.selectedPhotos.indexOf(draggedId) !== -1 && self.selectedPhotos.length > 1) {
+                        self.selectedPhotos.forEach(function(pid) {
+                            if (pid !== draggedId) {
+                                var el = document.querySelector('[data-id="' + pid + '"]');
+                                if (el) el.classList.add('drag-along');
+                            }
+                        });
+                    }
+                },
                 onEnd: function(evt) {
-                    var photoId = evt.item.getAttribute('data-id');
+                    // Убираем подсветку
+                    document.querySelectorAll('.drag-along').forEach(function(el) {
+                        el.classList.remove('drag-along');
+                    });
+
+                    var draggedId = evt.item.getAttribute('data-id');
                     var targetGrid = evt.to;
                     var targetSectionId = targetGrid.getAttribute('data-section-id') || null;
                     if (targetSectionId === '') targetSectionId = null;
                     var folderId = gallery.currentFolder ? gallery.currentFolder.id : null;
-                    if (!folderId || !photoId) return;
+                    if (!folderId || !draggedId) return;
 
-                    for (var i = 0; i < gallery.visiblePhotos.length; i++) {
-                        if (gallery.visiblePhotos[i].id === photoId) {
-                            if (targetSectionId) gallery.visiblePhotos[i].section_id = targetSectionId;
-                            else delete gallery.visiblePhotos[i].section_id;
-                            break;
-                        }
+                    // Определяем какие фото перемещаем:
+                    // если режим выбора и перетаскиваем одно из выбранных — перемещаем все выбранные
+                    var photosToMove = [];
+                    if (self.isSelectionMode && self.selectedPhotos.indexOf(draggedId) !== -1 && self.selectedPhotos.length > 1) {
+                        photosToMove = self.selectedPhotos.slice();
+                    } else {
+                        photosToMove = [draggedId];
                     }
+
+                    // Перемещаем все DOM-элементы кроме перетащенного (он уже перемещён SortableJS)
+                    photosToMove.forEach(function(pid) {
+                        if (pid === draggedId) return;
+                        var el = document.querySelector('[data-id="' + pid + '"]');
+                        if (el) targetGrid.appendChild(el);
+                    });
+
+                    // Обновляем section_id в памяти
+                    photosToMove.forEach(function(pid) {
+                        for (var i = 0; i < gallery.visiblePhotos.length; i++) {
+                            if (gallery.visiblePhotos[i].id === pid) {
+                                if (targetSectionId) gallery.visiblePhotos[i].section_id = targetSectionId;
+                                else delete gallery.visiblePhotos[i].section_id;
+                                break;
+                            }
+                        }
+                    });
 
                     gallery._updateUnsectionedVisibility();
 
+                    // Сохраняем новый порядок всей целевой сетки на сервер
                     var items = targetGrid.querySelectorAll('.photo-item');
                     var orders = [];
                     items.forEach(function(item, idx) {
@@ -456,6 +493,12 @@ var admin = {
                         });
                     });
                     api.reorderPhotos(folderId, orders);
+
+                    // Снимаем выделение после перемещения
+                    if (self.isSelectionMode && photosToMove.length > 1) {
+                        self.exitSelectionMode();
+                        setTimeout(function() { admin.initPhotosSortable(); }, 100);
+                    }
                 }
             });
             self._photoSortables.push(sortable);
@@ -554,6 +597,7 @@ var admin = {
 
         var btnDelete = document.getElementById('btn-delete-selected');
         var btnHide = document.getElementById('btn-hide-selected');
+        var btnMove = document.getElementById('btn-move-to-section');
 
         if (btnDelete) {
             btnDelete.textContent = 'Удалить выбранные (' + count + ')';
@@ -564,6 +608,12 @@ var admin = {
             btnHide.textContent = 'Скрыть выбранные (' + count + ')';
             btnHide.disabled = !has;
             btnHide.style.opacity = has ? '1' : '0.5';
+        }
+        // Кнопка "Переместить в секцию" — только в режиме секций
+        if (btnMove) {
+            btnMove.disabled = !has;
+            btnMove.style.opacity = has ? '1' : '0.5';
+            btnMove.style.display = gallery.sectionModeActive ? 'block' : 'none';
         }
     },
 
@@ -617,6 +667,77 @@ var admin = {
                 if (done === toHide.length) self.exitSelectionMode();
             });
         });
+    },
+
+    // Переместить выбранные фото в секцию (используется в режиме секций)
+    moveSelectedToSection: function() {
+        var self = this;
+        if (self.selectedPhotos.length === 0 || !gallery.currentFolder) return;
+
+        // Собираем список доступных секций
+        var sections = gallery.sections || [];
+        if (sections.length === 0) {
+            alert('Сначала создайте хотя бы одну секцию.');
+            return;
+        }
+
+        // Формируем список для выбора
+        var message = 'Выберите секцию (введите номер):\n\n0. Без секции (нераспределённые)\n';
+        sections.forEach(function(s, idx) {
+            message += (idx + 1) + '. ' + s.title + '\n';
+        });
+
+        var choice = prompt(message);
+        if (choice === null) return;
+        var num = parseInt(choice);
+        if (isNaN(num) || num < 0 || num > sections.length) {
+            alert('Неверный номер');
+            return;
+        }
+
+        var targetSectionId = num === 0 ? null : sections[num - 1].id;
+        var targetGrid = targetSectionId
+            ? document.getElementById('section-grid-' + targetSectionId)
+            : document.getElementById('unsectioned-grid');
+
+        if (!targetGrid) {
+            alert('Сетка секции не найдена. Убедитесь что вы в режиме секций.');
+            return;
+        }
+
+        var folderId = gallery.currentFolder.id;
+        var toMove = self.selectedPhotos.slice();
+
+        // Перемещаем DOM-элементы
+        toMove.forEach(function(pid) {
+            var el = document.querySelector('[data-id="' + pid + '"]');
+            if (el) targetGrid.appendChild(el);
+            // Обновляем в памяти
+            for (var i = 0; i < gallery.visiblePhotos.length; i++) {
+                if (gallery.visiblePhotos[i].id === pid) {
+                    if (targetSectionId) gallery.visiblePhotos[i].section_id = targetSectionId;
+                    else delete gallery.visiblePhotos[i].section_id;
+                    break;
+                }
+            }
+        });
+
+        gallery._updateUnsectionedVisibility();
+
+        // Сохраняем на сервер
+        var items = targetGrid.querySelectorAll('.photo-item');
+        var orders = [];
+        items.forEach(function(item, idx) {
+            orders.push({
+                id: item.getAttribute('data-id'),
+                order: idx + 1,
+                section_id: targetSectionId
+            });
+        });
+        api.reorderPhotos(folderId, orders);
+
+        self.exitSelectionMode();
+        setTimeout(function() { admin.initPhotosSortable(); }, 100);
     },
 
     // === БЭКАП ===

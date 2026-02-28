@@ -708,16 +708,29 @@ var gallery = {
     // === FULLSCREEN ПРОСМОТР ===
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
+
         this.currentPhotoIndex = index;
-
+        var photo = this.visiblePhotos[index];
         var viewer = document.getElementById('fullscreen-viewer');
-        var img = document.getElementById('fv-main-img');
-        if (!viewer || !img) return;
+        var container = document.querySelector('.fullscreen-viewer__image-container');
+        if (!viewer || !container) return;
 
-        img.src = this.visiblePhotos[index].thumbUrl || '';
+        // Инициализируем два img-слоя если ещё нет
+        if (!container.querySelector('#fv-img-a')) {
+            container.innerHTML =
+                '<img id="fv-img-a" class="fv-img-current" src="" alt="">' +
+                '<img id="fv-img-b" src="" alt="" style="opacity:0;">';
+        }
+
+        var imgA = document.getElementById('fv-img-a');
+        if (imgA) { imgA.src = photo.thumbUrl || ''; imgA.className = 'fv-img-current'; }
+        var imgB = document.getElementById('fv-img-b');
+        if (imgB) { imgB.src = ''; imgB.className = ''; imgB.style.opacity = '0'; }
+
+        this._updateActionsPanel(photo);
         viewer.style.display = 'flex';
+        this._animating = false;
 
-        this._updateActionsPanel(this.visiblePhotos[index]);
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
         var self = this;
@@ -730,14 +743,49 @@ var gallery = {
         document.addEventListener('keydown', this.keyHandler);
     },
 
-    _goToPhoto: function(index) {
-        if (index < 0 || index >= this.visiblePhotos.length) return;
-        this.currentPhotoIndex = index;
-        var img = document.getElementById('fv-main-img');
-        if (img) img.src = this.visiblePhotos[index].thumbUrl || '';
-        this._updateActionsPanel(this.visiblePhotos[index]);
+    // Плавная смена фото: текущее уезжает, новое въезжает одновременно
+    _changePhoto: function(newIndex, direction) {
+        if (this._animating) return;
+        if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
+
+        var self = this;
+        var photo = this.visiblePhotos[newIndex];
+
+        var imgA = document.getElementById('fv-img-a'); // текущее (видимое)
+        var imgB = document.getElementById('fv-img-b'); // следующее (скрытое)
+        if (!imgA || !imgB) { self.openFullscreen(newIndex); return; }
+
+        this._animating = true;
+        this.currentPhotoIndex = newIndex;
+
+        // Загружаем новое фото в скрытый слой
+        imgB.src = photo.thumbUrl || '';
+        // Ставим начальную позицию для въезда (без transition)
+        imgB.className = direction === 'left' ? 'fv-img-in-left' : 'fv-img-in-right';
+
+        this._updateActionsPanel(photo);
         if (typeof lucide !== 'undefined') lucide.createIcons();
+
+        // Запускаем анимацию в следующем кадре
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                imgA.className = direction === 'left' ? 'fv-img-out-left' : 'fv-img-out-right';
+                imgB.className = 'fv-img-current';
+
+                setTimeout(function() {
+                    // B стал текущим — переносим в A, сбрасываем B
+                    imgA.src = imgB.src;
+                    imgA.className = 'fv-img-current';
+                    imgB.className = '';
+                    imgB.style.opacity = '0';
+                    imgB.src = '';
+                    self._animating = false;
+                }, 350);
+            });
+        });
     },
+
+
 
     _updateActionsPanel: function(photo) {
         var panel = document.getElementById('fullscreen-actions');
@@ -754,6 +802,7 @@ var gallery = {
     closeFullscreen: function() {
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'none';
+        this._animating = false;
         if (this.keyHandler) {
             document.removeEventListener('keydown', this.keyHandler);
             this.keyHandler = null;
@@ -761,47 +810,39 @@ var gallery = {
     },
 
     prevPhoto: function() {
-        if (this.currentPhotoIndex > 0)
-            this._goToPhoto(this.currentPhotoIndex - 1);
+        this._changePhoto(this.currentPhotoIndex - 1, 'right');
     },
 
     nextPhoto: function() {
-        if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
-            this._goToPhoto(this.currentPhotoIndex + 1);
+        this._changePhoto(this.currentPhotoIndex + 1, 'left');
     },
 
     initSwipe: function() {
         var self = this;
-        var viewer = document.getElementById('fullscreen-viewer');
-        if (!viewer) return;
+        var container = document.querySelector('.fullscreen-viewer__image-container');
+        if (!container) return;
 
         var startX = 0, startY = 0;
 
-        viewer.addEventListener('touchstart', function(e) {
-            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
-            startX = e.touches[0].clientX;
-            startY = e.touches[0].clientY;
-        }, { passive: true });
+        container.ontouchstart = function(e) {
+            startX = e.changedTouches[0].screenX;
+            startY = e.changedTouches[0].screenY;
+        };
 
-        viewer.addEventListener('touchend', function(e) {
-            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
-            var dx = e.changedTouches[0].clientX - startX;
-            var dy = e.changedTouches[0].clientY - startY;
+        container.ontouchmove = function(e) {
+            var dx = Math.abs(e.changedTouches[0].screenX - startX);
+            var dy = Math.abs(e.changedTouches[0].screenY - startY);
+            if (dx > dy) e.preventDefault();
+        };
 
-            if (Math.abs(dy) > Math.abs(dx)) return;
-
-            var W = window.innerWidth;
-
-            if (Math.abs(dx) < 15) {
-                var tapX = e.changedTouches[0].clientX;
-                if (tapX < W * 0.25) self.prevPhoto();
-                else if (tapX > W * 0.75) self.nextPhoto();
-            } else if (dx < -W * 0.2) {
-                self.nextPhoto();
-            } else if (dx > W * 0.2) {
-                self.prevPhoto();
+        container.ontouchend = function(e) {
+            var dx = e.changedTouches[0].screenX - startX;
+            var dy = e.changedTouches[0].screenY - startY;
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+                if (dx < 0) self._changePhoto(self.currentPhotoIndex + 1, 'left');
+                else self._changePhoto(self.currentPhotoIndex - 1, 'right');
             }
-        }, { passive: true });
+        };
     },
 
     showMainPage: function() {
@@ -841,4 +882,3 @@ function scrollToFolders() {
     var mainPage = document.getElementById('main-page');
     if (mainPage) mainPage.scrollIntoView({ behavior: 'smooth' });
 }
-

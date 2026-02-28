@@ -605,48 +605,14 @@
 }
 
 /* ================================================== */
-/* АНИМАЦИЯ ПЕРЕЛИСТЫВАНИЯ                            */
-/*                                                    */
-/* Логика: "листаем вперёд (→)"                       */
-/*   текущее фото уходит ВЛЕВО  (translateX -40%)     */
-/*   новое фото приходит СПРАВА (translateX +40% → 0) */
-/*                                                    */
-/* Логика: "листаем назад (←)"                        */
-/*   текущее фото уходит ВПРАВО (translateX +40%)     */
-/*   новое фото приходит СЛЕВА  (translateX -40% → 0) */
+/* АНИМАЦИЯ ПЕРЕЛИСТЫВАНИЯ (два слоя fv-img-a/b)      */
 /* ================================================== */
 
-/* Текущее фото — в центре, видимое */
-.fv-img-current {
-    transform: translateX(0);
-    opacity: 1;
-}
-
-/* Уходящее фото влево (листаем вперёд →) */
-.fv-img-exit-left {
-    transform: translateX(-40%);
-    opacity: 0;
-}
-
-/* Уходящее фото вправо (листаем назад ←) */
-.fv-img-exit-right {
-    transform: translateX(40%);
-    opacity: 0;
-}
-
-/* Входящее фото справа — стартовая позиция (листаем вперёд →), transition: none чтобы мгновенно встать */
-.fv-img-enter-from-right {
-    transform: translateX(40%);
-    opacity: 0;
-    transition: none !important;
-}
-
-/* Входящее фото слева — стартовая позиция (листаем назад ←), transition: none чтобы мгновенно встать */
-.fv-img-enter-from-left {
-    transform: translateX(-40%);
-    opacity: 0;
-    transition: none !important;
-}
+.fv-img-current  { transform: translateX(0);    opacity: 1; }
+.fv-img-out-left { transform: translateX(-40%);  opacity: 0; }
+.fv-img-out-right{ transform: translateX(40%);   opacity: 0; }
+.fv-img-in-left  { transform: translateX(40%);   opacity: 0; transition: none !important; }
+.fv-img-in-right { transform: translateX(-40%);  opacity: 0; transition: none !important; }
 
 .fullscreen-viewer__close {
     display: none;

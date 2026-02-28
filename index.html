@@ -23,10 +23,43 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
     <meta name="apple-mobile-web-app-title" content="Фотоальбом">
-    <link rel="apple-touch-icon" href="https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
 
     <!-- Наши стили -->
     <link rel="stylesheet" href="css/custom.css" type="text/css" media="all" />
+
+    <style>
+        /* Кнопка установки PWA */
+        #pwa-install-btn {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            background: #ffffff;
+            color: #000000;
+            border: none;
+            border-radius: 50px;
+            padding: 12px 22px;
+            font-size: 14px;
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            align-items: center;
+            gap: 8px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        #pwa-install-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(0,0,0,0.4);
+        }
+        #pwa-install-btn svg {
+            width: 18px;
+            height: 18px;
+            flex-shrink: 0;
+        }
+    </style>
 
     <!-- SortableJS для перетаскивания папок -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.js"></script>
@@ -202,23 +235,23 @@
     </div>
 
     <!-- ПОЛНОЭКРАННЫЙ ПРОСМОТР ФОТО -->
-    <!-- Кнопки "Обложка" и "Удалить" создаются динамически в gallery.js — только для админа -->
     <div id="fullscreen-viewer" class="fullscreen-viewer" style="display:none;">
         <div class="fullscreen-viewer__overlay" onclick="gallery.closeFullscreen()"></div>
-
-        <!-- Панель кнопок — заполняется через JS в зависимости от роли -->
-        <div class="fullscreen-viewer__actions" id="fullscreen-actions">
-            <!-- Содержимое создаётся динамически в gallery.openFullscreen() -->
-        </div>
-
+        <div class="fullscreen-viewer__actions" id="fullscreen-actions"></div>
         <div class="fullscreen-viewer__wrapper">
             <button class="fullscreen-viewer__nav fullscreen-viewer__prev" onclick="gallery.prevPhoto()">‹</button>
-            <div class="fullscreen-viewer__image-container">
-    <!-- fv-img-a и fv-img-b создаются динамически в gallery.openFullscreen() -->
-</div>
+            <div class="fullscreen-viewer__image-container"></div>
             <button class="fullscreen-viewer__nav fullscreen-viewer__next" onclick="gallery.nextPhoto()">›</button>
         </div>
     </div>
+
+    <!-- КНОПКА УСТАНОВКИ PWA -->
+    <button id="pwa-install-btn" onclick="pwaInstall()">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v13M7 11l5 5 5-5"/><path d="M3 18h18v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2z"/>
+        </svg>
+        Установить приложение
+    </button>
 
     <!-- ФУТЕР -->
     <div id="main-footer" class="t-tildalabel t-tildalabel-free">
@@ -227,11 +260,40 @@
         </div>
     </div>
 
-
-
     <!-- Скрипты -->
     <script src="js/api.js?v=3"></script>
     <script src="js/gallery.js?v=4"></script>
     <script src="js/admin.js?v=4"></script>
+
+    <!-- PWA: перехват события установки -->
+    <script>
+        let _pwaPrompt = null;
+
+        // Перехватываем браузерный автобаннер — показываем ТОЛЬКО нашу кнопку
+        window.addEventListener('beforeinstallprompt', function(e) {
+            e.preventDefault(); // убирает автоматический системный баннер
+            _pwaPrompt = e;
+            var btn = document.getElementById('pwa-install-btn');
+            if (btn) btn.style.display = 'flex';
+        });
+
+        // Клик по нашей кнопке → показываем диалог установки
+        function pwaInstall() {
+            if (!_pwaPrompt) return;
+            _pwaPrompt.prompt();
+            _pwaPrompt.userChoice.then(function(result) {
+                _pwaPrompt = null;
+                var btn = document.getElementById('pwa-install-btn');
+                if (btn) btn.style.display = 'none';
+            });
+        }
+
+        // Если уже установлено — скрываем кнопку
+        window.addEventListener('appinstalled', function() {
+            var btn = document.getElementById('pwa-install-btn');
+            if (btn) btn.style.display = 'none';
+            _pwaPrompt = null;
+        });
+    </script>
 </body>
 </html>

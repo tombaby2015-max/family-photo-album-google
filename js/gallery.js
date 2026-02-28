@@ -259,214 +259,397 @@ var gallery = {
                 '<button class="preview-editor__btn zoom-out" onclick="gallery.zoomPreview(-10)">−</button>' +
                 '<button class="preview-editor__btn save" onclick="gallery.savePreview()">Сохранить</button>' +
                 '<button class="preview-editor__btn zoom-in" onclick="gallery.zoomPreview(10)">+</button>' +
-                '<button class="preview-editor__btn cancel" onclick="gallery.cancelPreview()">✕</button>' +
                 '</div>';
         }
 
-        return '<li id="folder-' + folder.id + '" class="folder-card ' + hiddenClass + (isEditing ? ' editing' : '') + '">' +
-            '<div class="folder-card__image" id="folder-image-' + folder.id + '"></div>' +
-            '<div class="folder-card__title">' + folder.title + ' <span>(' + folder.photo_count + ')</span></div>' +
-            adminActions + previewEditor +
-            '</li>';
+        // Счётчик фото: для админа показываем полное число (включая скрытые)
+        var photoCount = isAdmin
+            ? (folder.photo_count_admin || folder.photo_count || 0)
+            : (folder.photo_count || 0);
+
+        return '<li id="folder-' + folder.id + '" class="t214__col t-item t-card__col t-col t-col_4 folder-card ' + hiddenClass + (isEditing ? ' editing' : '') + '" data-folder-id="' + folder.id + '">' +
+            '<div class="folder-card__image" id="folder-image-' + folder.id + '" style="background-color:#eee;">' +
+                '<div class="folder-card__title">' + folder.title + (photoCount > 0 ? ' <span style="font-size:13px;opacity:0.8;font-weight:400;">(' + photoCount + ' фото)</span>' : '') + '</div>' +
+                adminActions +
+                previewEditor +
+            '</div>' +
+        '</li>';
     },
 
+    // === РЕДАКТОР ОБЛОЖКИ ===
     startEditPreview: function(folderId) {
         var self = this;
         var folder = null;
-        for (var i = 0; i < this.folders.length; i++) {
-            if (this.folders[i].id === folderId) { folder = this.folders[i]; break; }
+        for (var i = 0; i < self.folders.length; i++) {
+            if (self.folders[i].id === folderId) { folder = self.folders[i]; break; }
         }
         if (!folder) return;
 
-        var imgEl = document.getElementById('folder-image-' + folderId);
-        if (!imgEl || !imgEl.dataset.fileId) return alert('Обложка не установлена');
-
-        var fileId = imgEl.dataset.fileId;
-        var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + fileId + '&size=full';
-
-        var img = new Image();
-        img.onload = function() {
-            self.editingFolder = folderId;
-            self.previewState.x = folder.cover_x || 50;
-            self.previewState.y = folder.cover_y || 50;
-            self.previewState.scale = folder.cover_scale || 100;
-            self.previewState.imgUrl = url;
-            self.renderFolders();
+        self.editingFolder = folderId;
+        self.previewState = {
+            x: folder.cover_x !== undefined ? folder.cover_x : 50,
+            y: folder.cover_y !== undefined ? folder.cover_y : 50,
+            scale: folder.cover_scale !== undefined ? folder.cover_scale : 100
         };
-        img.src = url;
+
+        self.renderFolders();
+
+        var imgEl = document.getElementById('folder-image-' + folderId);
+        if (imgEl) {
+            if (folder.cover_url) {
+                var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
+                imgEl.style.backgroundImage = 'url(\'' + url + '\')';
+                imgEl.dataset.fileId = folder.cover_url;
+            } else {
+                api.getPhotosList(folderId).then(function(photos) {
+                    if (photos.length > 0) {
+                        var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + photos[0].file_id + '&size=thumb';
+                        imgEl.style.backgroundImage = 'url(\'' + url + '\')';
+                        imgEl.dataset.fileId = photos[0].file_id;
+                    }
+                });
+            }
+            self.updatePreviewStyle(imgEl);
+        }
+    },
+
+    updatePreviewStyle: function(imgEl) {
+        if (!imgEl) imgEl = document.getElementById('folder-image-' + this.editingFolder);
+        if (!imgEl) return;
+        imgEl.style.backgroundPosition = this.previewState.x + '% ' + this.previewState.y + '%';
+        imgEl.style.backgroundSize = this.previewState.scale + '%';
     },
 
     movePreview: function(dx, dy) {
         this.previewState.x = Math.max(0, Math.min(100, this.previewState.x + dx));
         this.previewState.y = Math.max(0, Math.min(100, this.previewState.y + dy));
-        this._applyPreviewEdit();
+        this.updatePreviewStyle();
     },
 
-    zoomPreview: function(ds) {
-        this.previewState.scale = Math.max(100, this.previewState.scale + ds);
-        this._applyPreviewEdit();
-    },
-
-    _applyPreviewEdit: function() {
-        var imgEl = document.getElementById('folder-image-' + this.editingFolder);
-        if (!imgEl) return;
-        imgEl.style.backgroundImage = 'url(\'' + this.previewState.imgUrl + '\')';
-        imgEl.style.backgroundPosition = this.previewState.x + '% ' + this.previewState.y + '%';
-        imgEl.style.backgroundSize = this.previewState.scale + '%';
+    zoomPreview: function(delta) {
+        this.previewState.scale = Math.max(50, Math.min(200, this.previewState.scale + delta));
+        this.updatePreviewStyle();
     },
 
     savePreview: function() {
-        var folderId = this.editingFolder;
-        api.updateFolder(folderId, {
-            cover_x: this.previewState.x,
-            cover_y: this.previewState.y,
-            cover_scale: this.previewState.scale
-        }).then(function(result) {
-            if (result) {
-                for (var i = 0; i < gallery.folders.length; i++) {
-                    if (gallery.folders[i].id === folderId) {
-                        gallery.folders[i].cover_x = gallery.previewState.x;
-                        gallery.folders[i].cover_y = gallery.previewState.y;
-                        gallery.folders[i].cover_scale = gallery.previewState.scale;
-                        break;
-                    }
-                }
-                gallery.editingFolder = null;
-                gallery.renderFolders();
-            } else {
-                alert('Ошибка сохранения');
-            }
+        var self = this;
+        if (!self.editingFolder) return;
+
+        var imgEl = document.getElementById('folder-image-' + self.editingFolder);
+        var fileId = imgEl ? (imgEl.dataset.fileId || null) : null;
+
+        api.updateFolder(self.editingFolder, {
+            cover_url: fileId,
+            cover_x: self.previewState.x,
+            cover_y: self.previewState.y,
+            cover_scale: self.previewState.scale
+        }).then(function() {
+            self.editingFolder = null;
+            // Сбрасываем кеш — обложка изменилась
+            self.clearFoldersCache();
+            self.loadFolders();
         });
     },
 
-    cancelPreview: function() {
-        this.editingFolder = null;
-        this.renderFolders();
-    },
+    // === ОТКРЫТИЕ ПАПКИ ===
+    openFolder: function(folder, pushState) {
+        this._lastFolderId = folder.id;
 
-    // ==========================================
-    // ОТКРЫТИЕ ПАПКИ
-    // ==========================================
-    openFolder: function(folder, scrollToLast) {
-        var self = this;
         this.currentFolder = folder;
-        this.sections = [];
-        this.sectionModeActive = false;
-        this.visiblePhotos = [];
         this.currentPhotos = [];
+        this.visiblePhotos = [];
+        this.sectionModeActive = false;
 
         document.getElementById('main-page').style.display = 'none';
         document.getElementById('rec-cover').style.display = 'none';
+        document.getElementById('folder-page').style.display = 'block';
+        document.getElementById('folder-page').classList.remove('section-mode');
 
-        var fp = document.getElementById('folder-page');
-        if (fp) {
-            fp.style.display = 'block';
-            fp.classList.remove('section-mode');
-        }
+        document.getElementById('folder-title-text').textContent = folder.title;
 
-        var title = document.getElementById('folder-title-text');
-        if (title) title.textContent = folder.title;
-
-        var cover = document.getElementById('folder-cover-image');
-        if (cover) {
-            if (folder.cover_url) {
-                var thumbUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
-                cover.style.backgroundImage = 'url(\'' + thumbUrl + '\')';
-                cover.style.backgroundPosition = (folder.cover_x || 50) + '% ' + (folder.cover_y || 50) + '%';
-                cover.style.backgroundSize = (folder.cover_scale || 100) + '%';
-            } else {
-                cover.style.backgroundImage = '';
-            }
+        var coverEl = document.getElementById('folder-cover-image');
+        if (coverEl) {
+            coverEl.style.backgroundImage = "url('https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg')";
+            coverEl.style.backgroundSize = 'cover';
+            coverEl.style.backgroundPosition = 'center';
         }
 
         var sidebarBtns = document.getElementById('sidebar-admin-buttons');
-        if (sidebarBtns) sidebarBtns.style.display = api.isAdmin() ? 'flex' : 'none';
+        if (sidebarBtns) {
+            sidebarBtns.style.display = api.isAdmin() ? 'flex' : 'none';
+        }
 
+        this._resetSectionModeButtons();
+
+        window.scrollTo(0, 0);
+
+        if (pushState !== false) {
+            window.location.hash = 'folder=' + folder.id;
+        }
+
+        this.loadPhotos(folder.id);
+    },
+
+    _resetSectionModeButtons: function() {
+        var btnEnable = document.getElementById('btn-enable-sections');
+        var btnExit = document.getElementById('btn-exit-sections');
+        var btnAdd = document.getElementById('btn-add-section');
+        if (btnEnable) btnEnable.style.display = 'block';
+        if (btnExit) btnExit.style.display = 'none';
+        if (btnAdd) btnAdd.style.display = 'none';
+    },
+
+    // === ЗАГРУЗКА ФОТО ===
+    // Загружаем все фото папки за один запрос (после оптимизации KV структуры)
+    loadPhotos: function(folderId) {
+        var self = this;
         var container = document.getElementById('photos-container');
+
         if (container) container.innerHTML = '<div class="loading">Загрузка фото...</div>';
+        self.currentPhotos = [];
+        self.visiblePhotos = [];
+        self.sections = [];
 
-        window.location.hash = 'folder=' + folder.id;
+        Promise.all([
+            api.getPhotosList(folderId),
+            api.getSections(folderId)
+        ]).then(function(results) {
+            var allPhotos = results[0];
+            self.sections = results[1] || [];
+            self.currentPhotos = allPhotos;
+            self.visiblePhotos = allPhotos.slice();
 
-        api.getSections(folder.id).then(function(sections) {
-            self.sections = sections;
-            return api.getPhotosList(folder.id);
-        }).then(function(photos) {
-            self.currentPhotos = photos;
-            self.visiblePhotos = photos.filter(function(p) { return !p.hidden || api.isAdmin(); });
-            self.renderPhotos(0);
-            if (scrollToLast) {
-                setTimeout(function() {
-                    var lastPhoto = document.querySelector('.photo-item:last-child');
-                    if (lastPhoto) lastPhoto.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
+            if (allPhotos.length === 0) {
+                if (container) container.innerHTML = '<div class="empty-state"><h4>В этой папке пока нет фото</h4></div>';
+                return;
             }
+
+            api.getPhotosThumbnails(folderId, allPhotos).then(function(thumbUrls) {
+                for (var i = 0; i < allPhotos.length; i++) {
+                    allPhotos[i].thumbUrl = thumbUrls[allPhotos[i].id] || '';
+                    var folderName = (gallery.currentFolder && gallery.currentFolder.title) ? encodeURIComponent(gallery.currentFolder.title) : '';
+                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName;
+                }
+
+                if (container) container.innerHTML = '';
+                self.renderPhotos(0);
+
+                if (api.isAdmin() && self.sectionModeActive) {
+                    setTimeout(function() {
+                        if (typeof admin !== 'undefined') admin.initPhotosSortable();
+                    }, 100);
+                }
+            });
+        }).catch(function() {
+            if (container) container.innerHTML = '<p>Ошибка загрузки</p>';
         });
     },
 
-    // ==========================================
-    // РЕНДЕР ФОТО
-    // ==========================================
-    renderPhotos: function(startIndex) {
+    // === РЕНДЕР ФОТО ===
+    renderPhotos: function(fromIndex) {
         var self = this;
         var container = document.getElementById('photos-container');
         if (!container) return;
 
-        var html = '';
-        if (this.sectionModeActive) {
-            html += this._renderSections();
-        } else {
-            html += '<div class="photos-grid" id="photos-grid">';
-            for (var i = startIndex; i < Math.min(startIndex + 40, this.visiblePhotos.length); i++) {
-                html += this.createPhotoItem(this.visiblePhotos[i], i);
+        if (!fromIndex || fromIndex === 0) {
+            container.innerHTML = '';
+
+            if (self.sectionModeActive && api.isAdmin()) {
+                self._renderSectionMode(container);
+            } else {
+                self._renderNormalMode(container);
             }
-            html += '</div>';
-        }
-
-        container.innerHTML = html;
-
-        if (this.sectionModeActive) {
-            this.sections.forEach(function(section) {
-                var header = document.getElementById('section-header-' + section.id);
-                if (header) {
-                    header.onclick = function() {
-                        admin.editSection(section.id, section.title);
-                    };
+        } else {
+            for (var k = fromIndex; k < self.visiblePhotos.length; k++) {
+                var photo = self.visiblePhotos[k];
+                var targetGrid = self._getPhotoGrid(photo);
+                if (targetGrid) {
+                    var it = self.createPhotoItem(photo, k);
+                    var dv = document.createElement('div');
+                    dv.innerHTML = it;
+                    targetGrid.appendChild(dv.firstChild);
                 }
-            });
-            this._assignPhotosToSections();
-            this._updateUnsectionedVisibility();
-            if (api.isAdmin()) setTimeout(function() { admin.initSectionsSortable(); admin.initPhotosSortable(); }, 100);
-        } else {
-            if (api.isAdmin()) setTimeout(function() { admin.initPhotosSortable(); }, 100);
-        }
-
-        if (startIndex + 40 < this.visiblePhotos.length) {
-            var loadMore = document.createElement('button');
-            loadMore.textContent = 'Загрузить ещё';
-            loadMore.onclick = function() { self.renderPhotos(startIndex + 40); };
-            container.appendChild(loadMore);
-        }
-    },
-
-    _renderSections: function() {
-        var html = '<div id="unsectioned-wrap" class="photos-section-block"><h3 id="unsectioned-header">Без секции</h3><div id="unsectioned-grid" class="photos-grid"></div></div>';
-        this.sections.forEach(function(section) {
-            html += '<div class="photos-section-block" data-section-id="' + section.id + '">' +
-                '<h3 id="section-header-' + section.id + '">' + section.title + '</h3>' +
-                '<div id="section-grid-' + section.id + '" class="photos-grid"></div>' +
-                '</div>';
-        });
-        return html;
-    },
-
-    _assignPhotosToSections: function() {
-        var self = this;
-        this.visiblePhotos.forEach(function(photo, index) {
-            var grid = self._getPhotoGrid(photo);
-            if (grid) {
-                grid.innerHTML += self.createPhotoItem(photo, index);
             }
-        });
+        }
+
+        self._buildDisplayOrder();
+    },
+
+    _buildDisplayOrder: function() {
+        var self = this;
+        self._displayOrder = self.visiblePhotos.map(function(p) { return p.id; });
+    },
+
+    _displayIndexById: function(photoId) {
+        if (!this._displayOrder) return -1;
+        return this._displayOrder.indexOf(photoId);
+    },
+
+    _photoById: function(photoId) {
+        for (var i = 0; i < this.visiblePhotos.length; i++) {
+            if (this.visiblePhotos[i].id === photoId) return this.visiblePhotos[i];
+        }
+        return null;
+    },
+
+    _renderNormalMode: function(container) {
+        var self = this;
+        var sections = self.sections || [];
+
+        var bySection = {};
+        var unsectioned = [];
+        for (var i = 0; i < self.visiblePhotos.length; i++) {
+            var p = self.visiblePhotos[i];
+            if (p.section_id) {
+                if (!bySection[p.section_id]) bySection[p.section_id] = [];
+                bySection[p.section_id].push(p);
+            } else {
+                unsectioned.push(p);
+            }
+        }
+
+        if (unsectioned.length > 0) {
+            var grid = document.createElement('div');
+            grid.id = 'unsectioned-grid';
+            grid.className = 'photos-grid';
+            grid.setAttribute('data-section-id', '');
+            for (var j = 0; j < unsectioned.length; j++) {
+                var item = self.createPhotoItem(unsectioned[j], self.visiblePhotos.indexOf(unsectioned[j]));
+                var d = document.createElement('div');
+                d.innerHTML = item;
+                grid.appendChild(d.firstChild);
+            }
+            container.appendChild(grid);
+        }
+
+        for (var k = 0; k < sections.length; k++) {
+            var section = sections[k];
+            var sectionPhotos = bySection[section.id] || [];
+
+            var sectionBlock = document.createElement('div');
+            sectionBlock.className = 'photos-section-block';
+            sectionBlock.id = 'section-block-' + section.id;
+
+            var headerHtml =
+                '<div class="photos-section-header">' +
+                '<div class="photos-section-line"></div>' +
+                '<span class="photos-section-title" id="section-title-' + section.id + '">' + section.title + '</span>' +
+                '<div class="photos-section-line"></div>';
+
+            if (api.isAdmin()) {
+                headerHtml +=
+                    '<div class="photos-section-admin-actions">' +
+                    '<button onclick="admin.renameSection(\'' + section.id + '\')" title="Переименовать">✏️</button>' +
+                    '<button onclick="admin.deleteSection(\'' + section.id + '\')" title="Удалить">🗑️</button>' +
+                    '</div>';
+            }
+            headerHtml += '</div>';
+            sectionBlock.innerHTML = headerHtml;
+
+            var sectionGrid = document.createElement('div');
+            sectionGrid.id = 'section-grid-' + section.id;
+            sectionGrid.className = 'photos-grid';
+            sectionGrid.setAttribute('data-section-id', section.id);
+
+            for (var m = 0; m < sectionPhotos.length; m++) {
+                var sItem = self.createPhotoItem(sectionPhotos[m], self.visiblePhotos.indexOf(sectionPhotos[m]));
+                var sDiv = document.createElement('div');
+                sDiv.innerHTML = sItem;
+                sectionGrid.appendChild(sDiv.firstChild);
+            }
+
+            sectionBlock.appendChild(sectionGrid);
+            container.appendChild(sectionBlock);
+        }
+    },
+
+    _renderSectionMode: function(container) {
+        var self = this;
+        var sections = self.sections || [];
+
+        var bySection = {};
+        var unsectioned = [];
+        for (var i = 0; i < self.visiblePhotos.length; i++) {
+            var p = self.visiblePhotos[i];
+            if (p.section_id) {
+                if (!bySection[p.section_id]) bySection[p.section_id] = [];
+                bySection[p.section_id].push(p);
+            } else {
+                unsectioned.push(p);
+            }
+        }
+
+        var topBlock = document.createElement('div');
+        topBlock.id = 'unsectioned-wrap';
+        topBlock.className = 'section-mode-top';
+        topBlock.style.display = unsectioned.length > 0 ? '' : 'none';
+
+        var topLabel = document.createElement('div');
+        topLabel.className = 'section-block-label';
+        topLabel.textContent = 'Нераспределённые фото';
+        topBlock.appendChild(topLabel);
+
+        var topGrid = document.createElement('div');
+        topGrid.id = 'unsectioned-grid';
+        topGrid.className = 'photos-section-grid';
+        topGrid.setAttribute('data-section-id', '');
+        for (var j = 0; j < unsectioned.length; j++) {
+            var item = self.createPhotoItem(unsectioned[j], self.visiblePhotos.indexOf(unsectioned[j]));
+            var d = document.createElement('div');
+            d.innerHTML = item;
+            topGrid.appendChild(d.firstChild);
+        }
+        topBlock.appendChild(topGrid);
+        container.appendChild(topBlock);
+
+        var bottomBlock = document.createElement('div');
+        bottomBlock.id = 'sections-wrap';
+        bottomBlock.className = 'section-mode-bottom';
+
+        for (var k = 0; k < sections.length; k++) {
+            var section = sections[k];
+            var sectionPhotos = bySection[section.id] || [];
+
+            var sectionEl = document.createElement('div');
+            sectionEl.className = 'photos-section-block';
+            sectionEl.id = 'section-block-' + section.id;
+
+            var headerHtml =
+                '<div class="photos-section-header">' +
+                '<div class="photos-section-line"></div>' +
+                '<span class="photos-section-title" id="section-title-' + section.id + '">' + section.title + '</span>' +
+                '<div class="photos-section-line"></div>' +
+                '<div class="photos-section-admin-actions">' +
+                '<button onclick="admin.renameSection(\'' + section.id + '\')" title="Переименовать">✏️</button>' +
+                '<button onclick="admin.deleteSection(\'' + section.id + '\')" title="Удалить">🗑️</button>' +
+                '</div>' +
+                '</div>';
+            sectionEl.innerHTML = headerHtml;
+
+            var sectionGrid = document.createElement('div');
+            sectionGrid.id = 'section-grid-' + section.id;
+            sectionGrid.className = 'photos-section-grid';
+            sectionGrid.setAttribute('data-section-id', section.id);
+
+            for (var m = 0; m < sectionPhotos.length; m++) {
+                var sItem = self.createPhotoItem(sectionPhotos[m], self.visiblePhotos.indexOf(sectionPhotos[m]));
+                var sDiv = document.createElement('div');
+                sDiv.innerHTML = sItem;
+                sectionGrid.appendChild(sDiv.firstChild);
+            }
+
+            sectionEl.appendChild(sectionGrid);
+            bottomBlock.appendChild(sectionEl);
+        }
+
+        if (sections.length === 0) {
+            var hint = document.createElement('div');
+            hint.style.cssText = 'padding:30px;text-align:center;color:#aaa;font-size:14px;';
+            hint.textContent = 'Секций пока нет. Нажмите "+ Добавить секцию".';
+            bottomBlock.appendChild(hint);
+        }
+
+        container.appendChild(bottomBlock);
     },
 
     _getPhotoGrid: function(photo) {
@@ -523,8 +706,29 @@ var gallery = {
     },
 
     // === FULLSCREEN ПРОСМОТР ===
-    // Анимация: два img (fv-img-a = текущее, fv-img-b = новое).
-    // При смене: текущее уезжает влево/вправо, новое въезжает с другой стороны.
+    // Анимация: «лента» из трёх слоёв (prev / curr / next).
+    // _fvSlot — индекс «активного» слота (0, 1 или 2), циклически меняется.
+    // Каждый слот — это <img> с position:absolute внутри overflow:hidden контейнера.
+    // При переходе вперёд:  текущий уезжает влево (-100%), новый въезжает справа (+100%).
+    // При переходе назад:  текущий уезжает вправо (+100%), новый въезжает слева (-100%).
+
+    _fvSlot: 0,   // индекс активного img-слота (0..2)
+
+    _fvImgs: function() {
+        return [
+            document.getElementById('fv-img-0'),
+            document.getElementById('fv-img-1'),
+            document.getElementById('fv-img-2')
+        ];
+    },
+
+    _fvSetPos: function(img, x, animate) {
+        if (!img) return;
+        img.style.transition = animate
+            ? 'transform 0.32s cubic-bezier(.4,0,.2,1)'
+            : 'none';
+        img.style.transform = 'translateX(' + x + '%)';
+    },
 
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
@@ -535,24 +739,51 @@ var gallery = {
         var container = document.querySelector('.fullscreen-viewer__image-container');
         if (!viewer || !container) return;
 
-        // Создаём два слоя один раз
-        if (!document.getElementById('fv-img-a')) {
+        // Создаём три слоя один раз
+        if (!document.getElementById('fv-img-0')) {
+            var baseStyle = 'position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;will-change:transform;';
             container.innerHTML =
-                '<img id="fv-img-a" style="position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;transition:transform 0.32s cubic-bezier(.4,0,.2,1),opacity 0.32s ease;will-change:transform,opacity;" src="" alt="">' +
-                '<img id="fv-img-b" style="position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;transition:transform 0.32s cubic-bezier(.4,0,.2,1),opacity 0.32s ease;will-change:transform,opacity;opacity:0;transform:translateX(100%);" src="" alt="">';
+                '<img id="fv-img-0" style="' + baseStyle + 'transform:translateX(0);" src="" alt="">' +
+                '<img id="fv-img-1" style="' + baseStyle + 'transform:translateX(100%);" src="" alt="">' +
+                '<img id="fv-img-2" style="' + baseStyle + 'transform:translateX(100%);" src="" alt="">';
         }
 
-        var imgA = document.getElementById('fv-img-a');
-        var imgB = document.getElementById('fv-img-b');
-        imgA.src = this.visiblePhotos[index].thumbUrl || '';
-        imgA.style.transform = 'translateX(0)';
-        imgA.style.opacity = '1';
-        imgB.src = '';
-        imgB.style.transform = 'translateX(100%)';
-        imgB.style.opacity = '0';
+        // Сброс: все слоты убираем за правый край, активный (slot 0) — в центр
+        this._fvSlot = 0;
+        var imgs = this._fvImgs();
+        for (var i = 0; i < 3; i++) {
+            imgs[i].src = '';
+            this._fvSetPos(imgs[i], 100, false);
+        }
+        imgs[0].src = this.visiblePhotos[index].thumbUrl || '';
+        this._fvSetPos(imgs[0], 0, false);
 
         this._updateActionsPanel(this.visiblePhotos[index]);
         viewer.style.display = 'flex';
+
+        // Зоны нажатия на краях — только для мобильных (nav-кнопки на мобиле скрыты)
+        if (!document.getElementById('fv-tap-prev')) {
+            var tapPrev = document.createElement('div');
+            tapPrev.id = 'fv-tap-prev';
+            tapPrev.style.cssText = 'position:absolute;left:0;top:0;width:25%;height:100%;z-index:3;cursor:pointer;display:none;';
+            tapPrev.onclick = function() { gallery.prevPhoto(); };
+            var tapNext = document.createElement('div');
+            tapNext.id = 'fv-tap-next';
+            tapNext.style.cssText = 'position:absolute;right:0;top:0;width:25%;height:100%;z-index:3;cursor:pointer;display:none;';
+            tapNext.onclick = function() { gallery.nextPhoto(); };
+            var wrapper = document.querySelector('.fullscreen-viewer__wrapper');
+            if (wrapper) {
+                wrapper.appendChild(tapPrev);
+                wrapper.appendChild(tapNext);
+            }
+        }
+        // Показываем tap-зоны только на мобильных (когда nav скрыт)
+        var isMobile = window.innerWidth <= 768;
+        var tapP = document.getElementById('fv-tap-prev');
+        var tapN = document.getElementById('fv-tap-next');
+        if (tapP) tapP.style.display = isMobile ? 'block' : 'none';
+        if (tapN) tapN.style.display = isMobile ? 'block' : 'none';
+
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
         var self = this;
@@ -570,50 +801,48 @@ var gallery = {
         if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
 
         var self = this;
-        var imgA = document.getElementById('fv-img-a');
-        var imgB = document.getElementById('fv-img-b');
-        if (!imgA || !imgB) { self.openFullscreen(newIndex); return; }
+        var imgs = this._fvImgs();
+        if (!imgs[0]) { self.openFullscreen(newIndex); return; }
 
         this._animating = true;
-        this.currentPhotoIndex = newIndex;
 
-        // direction: 'left' — листаем вперёд, 'right' — назад
-        var enterFrom = direction === 'left' ? 'translateX(100%)' : 'translateX(-100%)';
-        var exitTo    = direction === 'left' ? 'translateX(-100%)' : 'translateX(100%)';
+        var currSlot = this._fvSlot;
+        var nextSlot = (currSlot + 1) % 3;
 
-        // Ставим B за краем экрана (без transition)
-        imgB.style.transition = 'none';
-        imgB.style.transform = enterFrom;
-        imgB.style.opacity = '1';
-        imgB.src = self.visiblePhotos[newIndex].thumbUrl || '';
+        // direction: 'left' — вперёд, 'right' — назад
+        var enterFrom = direction === 'left' ? 100 : -100;
+        var exitTo    = direction === 'left' ? -100 : 100;
+
+        // Готовим новый слот: убираем без анимации на стартовую позицию
+        imgs[nextSlot].src = self.visiblePhotos[newIndex].thumbUrl || '';
+        self._fvSetPos(imgs[nextSlot], enterFrom, false);
 
         // Следующий кадр — запускаем анимацию
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
-                imgA.style.transform = exitTo;
-                imgA.style.opacity = '0';
-                imgB.style.transition = 'transform 0.32s cubic-bezier(.4,0,.2,1), opacity 0.32s ease';
-                imgB.style.transform = 'translateX(0)';
-                imgB.style.opacity = '1';
+                // Текущий уезжает
+                self._fvSetPos(imgs[currSlot], exitTo, true);
+                // Новый въезжает в центр
+                self._fvSetPos(imgs[nextSlot], 0, true);
 
                 setTimeout(function() {
-                    // Меняем местами: B становится новым A
-                    imgA.src = imgB.src;
-                    imgA.style.transition = 'none';
-                    imgA.style.transform = 'translateX(0)';
-                    imgA.style.opacity = '1';
-                    imgB.style.transition = 'none';
-                    imgB.style.transform = 'translateX(100%)';
-                    imgB.style.opacity = '0';
-                    imgB.src = '';
+                    // Активный слот теперь nextSlot
+                    self._fvSlot = nextSlot;
+                    self.currentPhotoIndex = newIndex;
+
+                    // Убираем старый слот за экран (без анимации)
+                    self._fvSetPos(imgs[currSlot], 100, false);
+                    imgs[currSlot].src = '';
 
                     self._updateActionsPanel(self.visiblePhotos[newIndex]);
                     if (typeof lucide !== 'undefined') lucide.createIcons();
                     self._animating = false;
-                }, 340);
+                }, 350);
             });
         });
     },
+
+
 
     _updateActionsPanel: function(photo) {
         var panel = document.getElementById('fullscreen-actions');
@@ -652,33 +881,27 @@ var gallery = {
         var viewer = document.getElementById('fullscreen-viewer');
         if (!viewer) return;
 
-        var startX = 0, startY = 0;
+        var startX = 0, startY = 0, tracking = false;
 
         viewer.addEventListener('touchstart', function(e) {
             if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+            // Исключаем tap-зоны — они обрабатываются через onclick
+            if (e.target.id === 'fv-tap-prev' || e.target.id === 'fv-tap-next') return;
+            tracking = true;
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
         }, { passive: true });
 
         viewer.addEventListener('touchend', function(e) {
-            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+            if (!tracking) return;
+            tracking = false;
             var dx = e.changedTouches[0].clientX - startX;
             var dy = e.changedTouches[0].clientY - startY;
-            if (Math.abs(dy) > Math.abs(dx)) return;
-            if (dx < -50) self.nextPhoto();  // Свайп влево — вперёд
-            else if (dx > 50) self.prevPhoto();  // Свайп вправо — назад
-            else {
-                // Логика тапа (нажатия) на края фото — только в мобильной версии (max-width: 768px)
-                if (window.matchMedia('(max-width: 768px)').matches) {
-                    var viewerWidth = viewer.clientWidth;
-                    var tapX = e.changedTouches[0].clientX;
-                    if (tapX < viewerWidth / 2) {
-                        self.prevPhoto();  // Тап слева — назад
-                    } else {
-                        self.nextPhoto();  // Тап справа — вперёд
-                    }
-                }
-            }
+            // Горизонтальный свайп должен явно преобладать
+            if (Math.abs(dy) > Math.abs(dx) * 0.8) return;
+            if (Math.abs(dx) < 50) return;
+            if (dx < 0) self._goToPhoto(self.currentPhotoIndex + 1, 'left');
+            else self._goToPhoto(self.currentPhotoIndex - 1, 'right');
         }, { passive: true });
     },
 

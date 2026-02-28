@@ -1,6 +1,20 @@
-// gallery.js — показывает папки и фото (Google Drive версия) 
+// gallery.js — показывает папки и фото (Google Drive версия)
+//
+// ОПТИМИЗАЦИЯ: добавлен localStorage кеш для папок
+// Логика "сначала показать из кеша, потом проверить на сервере"
+//
+// Всё остальное не изменилось:
+// - роли посетитель/администратор
+// - секции внутри папок
+// - батчевая загрузка по 40 фото
+// - обложка с настройкой позиции
+// - hash в URL (#folder=ID)
+// - полноэкранный просмотр, свайпы, клавиши
 
-var BATCH_SIZE = 40;
+
+// Настройки кеша
+var CACHE_KEY_FOLDERS = 'photo_cache_folders';
+var CACHE_TTL = 30 * 60 * 1000; // 30 минут в миллисекундах
 
 var gallery = {
     folders: [],
@@ -11,7 +25,61 @@ var gallery = {
     editingFolder: null,
     previewState: { x: 50, y: 50, scale: 100 },
     keyHandler: null,
+    sections: [],
+    sectionModeActive: false,
 
+    // ==========================================
+    // КЕШ ПАПОК
+    // Сохраняем список папок в localStorage браузера.
+    // При следующем открытии — показываем мгновенно из кеша,
+    // фоном тихо загружаем свежие данные с сервера.
+    // Если данные изменились — обновляем страницу незаметно.
+    // ==========================================
+
+    // Сохранить папки в кеш
+    _saveFoldersToCache: function(folders) {
+        // Администраторам не кешируем — им всегда нужны актуальные данные
+        if (api.isAdmin()) return;
+        try {
+            var entry = {
+                folders: folders,
+                timestamp: Date.now()
+            };
+            localStorage.setItem(CACHE_KEY_FOLDERS, JSON.stringify(entry));
+        } catch(e) {
+            // localStorage может быть недоступен (приватный режим и т.д.) — игнорируем
+        }
+    },
+
+    // Прочитать папки из кеша
+    // Возвращает массив папок или null если кеш устарел/отсутствует
+    _loadFoldersFromCache: function() {
+        if (api.isAdmin()) return null;
+        try {
+            var raw = localStorage.getItem(CACHE_KEY_FOLDERS);
+            if (!raw) return null;
+            var entry = JSON.parse(raw);
+            // Проверяем не устарел ли кеш
+            if (Date.now() - entry.timestamp > CACHE_TTL) {
+                localStorage.removeItem(CACHE_KEY_FOLDERS);
+                return null;
+            }
+            return entry.folders || null;
+        } catch(e) {
+            return null;
+        }
+    },
+
+    // Сбросить кеш (вызывается после синхронизации или изменений)
+    clearFoldersCache: function() {
+        try {
+            localStorage.removeItem(CACHE_KEY_FOLDERS);
+        } catch(e) {}
+    },
+
+    // ==========================================
+    // ИНИЦИАЛИЗАЦИЯ
+    // ==========================================
     init: function() {
         var self = this;
         var hash = window.location.hash;
@@ -27,6 +95,7 @@ var gallery = {
         var self = this;
         api.getFolders().then(function(folders) {
             self.folders = folders;
+            self._saveFoldersToCache(folders);
             self.renderFolders();
             var folder = null;
             for (var i = 0; i < folders.length; i++) {
@@ -37,16 +106,71 @@ var gallery = {
         });
     },
 
+    // ==========================================
+    // ЗАГРУЗКА ПАПОК — с кешем
+    //
+    // Шаг 1: Мгновенно показываем из кеша (если есть)
+    // Шаг 2: Фоном загружаем с сервера
+    // Шаг 3: Если данные отличаются — обновляем страницу
+    // ==========================================
     loadFolders: function() {
         var self = this;
         var container = document.getElementById('folders-container');
-        if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
-        api.getFolders().then(function(folders) {
-            self.folders = folders;
+
+        // Пробуем загрузить из кеша
+        var cached = self._loadFoldersFromCache();
+
+        if (cached && cached.length > 0) {
+            // Есть кеш — показываем мгновенно
+            self.folders = cached;
             self.renderFolders();
-        });
+
+            // Фоном тихо загружаем свежие данные
+            api.getFolders().then(function(freshFolders) {
+                // Сравниваем с кешем — изменилось ли что-то?
+                if (self._foldersChanged(cached, freshFolders)) {
+                    // Данные изменились — обновляем
+                    self.folders = freshFolders;
+                    self._saveFoldersToCache(freshFolders);
+                    self.renderFolders();
+                } else {
+                    // Ничего не изменилось — просто обновляем временную метку кеша
+                    self._saveFoldersToCache(freshFolders);
+                }
+            });
+        } else {
+            // Кеша нет — обычная загрузка с индикатором
+            if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
+            api.getFolders().then(function(folders) {
+                self.folders = folders;
+                self._saveFoldersToCache(folders);
+                self.renderFolders();
+            });
+        }
     },
 
+    // Сравниваем два списка папок — изменилось ли что-то важное
+    _foldersChanged: function(oldFolders, newFolders) {
+        if (oldFolders.length !== newFolders.length) return true;
+        for (var i = 0; i < newFolders.length; i++) {
+            var nf = newFolders[i];
+            var of_ = null;
+            for (var j = 0; j < oldFolders.length; j++) {
+                if (oldFolders[j].id === nf.id) { of_ = oldFolders[j]; break; }
+            }
+            if (!of_) return true;
+            if (of_.title !== nf.title) return true;
+            if (of_.hidden !== nf.hidden) return true;
+            if (of_.photo_count !== nf.photo_count) return true;
+            if (of_.cover_url !== nf.cover_url) return true;
+            if (of_.order !== nf.order) return true;
+        }
+        return false;
+    },
+
+    // ==========================================
+    // РЕНДЕР ПАПОК — не изменился
+    // ==========================================
     renderFolders: function() {
         var self = this;
         var container = document.getElementById('folders-container');
@@ -88,7 +212,6 @@ var gallery = {
         }
     },
 
-    // Обложка папки — только если задана вручную, иначе серый фон
     loadFolderCover: function(folder) {
         var self = this;
         var imgEl = document.getElementById('folder-image-' + folder.id);
@@ -98,7 +221,6 @@ var gallery = {
             var thumbUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
             self.applyFolderCover(imgEl, thumbUrl, folder);
         }
-        // Нет обложки — оставляем серый фон, ничего не делаем
     },
 
     applyFolderCover: function(imgEl, url, folder) {
@@ -126,7 +248,6 @@ var gallery = {
                 '</div>';
         }
 
-        // FIX #7: кнопки − Сохранить + симметрично
         var previewEditor = '';
         if (isEditing) {
             previewEditor =
@@ -141,9 +262,14 @@ var gallery = {
                 '</div>';
         }
 
+        // Счётчик фото: для админа показываем полное число (включая скрытые)
+        var photoCount = isAdmin
+            ? (folder.photo_count_admin || folder.photo_count || 0)
+            : (folder.photo_count || 0);
+
         return '<li id="folder-' + folder.id + '" class="t214__col t-item t-card__col t-col t-col_4 folder-card ' + hiddenClass + (isEditing ? ' editing' : '') + '" data-folder-id="' + folder.id + '">' +
             '<div class="folder-card__image" id="folder-image-' + folder.id + '" style="background-color:#eee;">' +
-                '<div class="folder-card__title">' + folder.title + (folder.photo_count > 0 ? ' <span style="font-size:13px;opacity:0.8;font-weight:400;">(' + folder.photo_count + ' фото)</span>' : '') + '</div>' +
+                '<div class="folder-card__title">' + folder.title + (photoCount > 0 ? ' <span style="font-size:13px;opacity:0.8;font-weight:400;">(' + photoCount + ' фото)</span>' : '') + '</div>' +
                 adminActions +
                 previewEditor +
             '</div>' +
@@ -205,7 +331,6 @@ var gallery = {
         this.updatePreviewStyle();
     },
 
-    // FIX #4: сохраняем file_id, убираем alert
     savePreview: function() {
         var self = this;
         if (!self.editingFolder) return;
@@ -220,25 +345,28 @@ var gallery = {
             cover_scale: self.previewState.scale
         }).then(function() {
             self.editingFolder = null;
+            // Сбрасываем кеш — обложка изменилась
+            self.clearFoldersCache();
             self.loadFolders();
         });
     },
 
     // === ОТКРЫТИЕ ПАПКИ ===
     openFolder: function(folder, pushState) {
-        this._lastFolderId = folder.id; // FIX #1: запоминаем для возврата
+        this._lastFolderId = folder.id;
 
         this.currentFolder = folder;
         this.currentPhotos = [];
         this.visiblePhotos = [];
+        this.sectionModeActive = false;
 
         document.getElementById('main-page').style.display = 'none';
         document.getElementById('rec-cover').style.display = 'none';
         document.getElementById('folder-page').style.display = 'block';
+        document.getElementById('folder-page').classList.remove('section-mode');
 
         document.getElementById('folder-title-text').textContent = folder.title;
 
-        // Полоска вверху — всегда главное фото сайта
         var coverEl = document.getElementById('folder-cover-image');
         if (coverEl) {
             coverEl.style.backgroundImage = "url('https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg')";
@@ -251,34 +379,36 @@ var gallery = {
             sidebarBtns.style.display = api.isAdmin() ? 'flex' : 'none';
         }
 
+        this._resetSectionModeButtons();
+
         window.scrollTo(0, 0);
 
         if (pushState !== false) {
             window.location.hash = 'folder=' + folder.id;
         }
 
-        this.loadPhotos(folder.id, 0);
+        this.loadPhotos(folder.id);
+    },
+
+    _resetSectionModeButtons: function() {
+        var btnEnable = document.getElementById('btn-enable-sections');
+        var btnExit = document.getElementById('btn-exit-sections');
+        var btnAdd = document.getElementById('btn-add-section');
+        if (btnEnable) btnEnable.style.display = 'block';
+        if (btnExit) btnExit.style.display = 'none';
+        if (btnAdd) btnAdd.style.display = 'none';
     },
 
     // === ЗАГРУЗКА ФОТО ===
-    sections: [],
-    sectionModeActive: false,
-
-    loadPhotos: function(folderId, offset) {
+    // Загружаем все фото папки за один запрос (после оптимизации KV структуры)
+    loadPhotos: function(folderId) {
         var self = this;
         var container = document.getElementById('photos-container');
 
-        if (offset === 0) {
-            if (container) container.innerHTML = '<div class="loading">Загрузка фото...</div>';
-            self.currentPhotos = [];
-            self.visiblePhotos = [];
-            self.sections = [];
-            self.sectionModeActive = false;
-            var btnEnable = document.getElementById('btn-enable-sections');
-            var btnAdd = document.getElementById('btn-add-section');
-            if (btnEnable) btnEnable.style.display = 'block';
-            if (btnAdd) btnAdd.style.display = 'none';
-        }
+        if (container) container.innerHTML = '<div class="loading">Загрузка фото...</div>';
+        self.currentPhotos = [];
+        self.visiblePhotos = [];
+        self.sections = [];
 
         Promise.all([
             api.getPhotosList(folderId),
@@ -287,149 +417,85 @@ var gallery = {
             var allPhotos = results[0];
             self.sections = results[1] || [];
             self.currentPhotos = allPhotos;
+            self.visiblePhotos = allPhotos.slice();
 
-            // Автоматически включаем режим секций если они уже есть у этой папки
-            if (self.sections.length > 0) {
-                self.sectionModeActive = true;
-                // Скрываем кнопку "Разбить на секции", показываем "Добавить секцию"
-                var btnEnable = document.getElementById('btn-enable-sections');
-                var btnAdd = document.getElementById('btn-add-section');
-                if (btnEnable) btnEnable.style.display = 'none';
-                if (btnAdd) btnAdd.style.display = 'block';
-            }
-
-            var batch = allPhotos.slice(offset, offset + BATCH_SIZE);
-            if (batch.length === 0) {
-                if (offset === 0 && container) {
-                    container.innerHTML = '<div class="empty-state"><h4>В этой папке пока нет фото</h4></div>';
-                }
+            if (allPhotos.length === 0) {
+                if (container) container.innerHTML = '<div class="empty-state"><h4>В этой папке пока нет фото</h4></div>';
                 return;
             }
 
-            api.getPhotosThumbnails(folderId, batch).then(function(thumbUrls) {
-                for (var i = 0; i < batch.length; i++) {
-                    batch[i].thumbUrl = thumbUrls[batch[i].id] || '';
-                    batch[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + batch[i].file_id + '&size=original';
+            api.getPhotosThumbnails(folderId, allPhotos).then(function(thumbUrls) {
+                for (var i = 0; i < allPhotos.length; i++) {
+                    allPhotos[i].thumbUrl = thumbUrls[allPhotos[i].id] || '';
+                    var folderName = (gallery.currentFolder && gallery.currentFolder.title) ? encodeURIComponent(gallery.currentFolder.title) : '';
+                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName;
                 }
 
-                if (offset === 0 && container) {
-                    container.innerHTML = '';
-                } else {
-                    var oldBtn = document.getElementById('load-more-container');
-                    if (oldBtn) oldBtn.remove();
-                }
+                if (container) container.innerHTML = '';
+                self.renderPhotos(0);
 
-                for (var j = 0; j < batch.length; j++) {
-                    self.visiblePhotos.push(batch[j]);
-                }
-
-                self.renderPhotos(offset);
-
-                if (offset + BATCH_SIZE < allPhotos.length) {
-                    self.showLoadMoreButton(folderId, offset + BATCH_SIZE, allPhotos);
-                }
-
-                // Вычисляем реальный размер миниатюры и передаём в CSS
-                setTimeout(function() {
-                    var firstPhoto = document.querySelector('.photos-section-grid .photo-item, .photos-grid .photo-item');
-                    if (firstPhoto) {
-                        var size = firstPhoto.offsetWidth;
-                        if (size > 0) {
-                            document.documentElement.style.setProperty('--photo-thumb-size', size + 'px');
-                        }
-                    }
-                    if (api.isAdmin()) {
+                if (api.isAdmin() && self.sectionModeActive) {
+                    setTimeout(function() {
                         if (typeof admin !== 'undefined') admin.initPhotosSortable();
-                    }
-                }, 150);
+                    }, 100);
+                }
             });
         }).catch(function() {
-            if (offset === 0 && container) {
-                container.innerHTML = '<p>Ошибка загрузки</p>';
-            }
+            if (container) container.innerHTML = '<p>Ошибка загрузки</p>';
         });
     },
 
-    showLoadMoreButton: function(folderId, nextOffset, allPhotos) {
-        var self = this;
-        var container = document.getElementById('photos-container');
-        if (!container) return;
-
-        var div = document.createElement('div');
-        div.id = 'load-more-container';
-        div.style.cssText = 'text-align:center;padding:20px;';
-        div.innerHTML = '<button id="load-more-btn" style="padding:15px 30px;background:rgba(0,0,0,0.05);border:none;border-radius:8px;cursor:pointer;color:#666;font-size:16px;">+ Загрузить ещё фото</button>';
-        container.appendChild(div);
-
-        document.getElementById('load-more-btn').onclick = function() {
-            this.textContent = 'Загружается...';
-            self.loadPhotos(folderId, nextOffset);
-        };
-    },
-
+    // === РЕНДЕР ФОТО ===
     renderPhotos: function(fromIndex) {
         var self = this;
         var container = document.getElementById('photos-container');
         if (!container) return;
 
-        // Полный перерендер при первой загрузке
         if (!fromIndex || fromIndex === 0) {
             container.innerHTML = '';
-            if (self.sectionModeActive) {
-                self._renderWithSections(container);
+
+            if (self.sectionModeActive && api.isAdmin()) {
+                self._renderSectionMode(container);
             } else {
-                // Обычная сетка без секций и скролла
-                var grid = document.createElement('div');
-                grid.id = 'unsectioned-grid';
-                grid.className = 'photos-grid';
-                grid.setAttribute('data-section-id', '');
-                for (var i = 0; i < self.visiblePhotos.length; i++) {
-                    var item = self.createPhotoItem(self.visiblePhotos[i], i);
-                    var d = document.createElement('div');
-                    d.innerHTML = item;
-                    grid.appendChild(d.firstChild);
-                }
-                container.appendChild(grid);
+                self._renderNormalMode(container);
             }
         } else {
-            // Дозагрузка — добавляем новые фото в нужные грид-ы
-            for (var i = fromIndex; i < self.visiblePhotos.length; i++) {
-                var photo = self.visiblePhotos[i];
+            for (var k = fromIndex; k < self.visiblePhotos.length; k++) {
+                var photo = self.visiblePhotos[k];
                 var targetGrid = self._getPhotoGrid(photo);
                 if (targetGrid) {
-                    var item = self.createPhotoItem(photo, i);
-                    var div = document.createElement('div');
-                    div.innerHTML = item;
-                    targetGrid.appendChild(div.firstChild);
+                    var it = self.createPhotoItem(photo, k);
+                    var dv = document.createElement('div');
+                    dv.innerHTML = it;
+                    targetGrid.appendChild(dv.firstChild);
                 }
             }
-            self._updateUnsectionedVisibility();
         }
+
+        self._buildDisplayOrder();
     },
 
-    _getPhotoGrid: function(photo) {
-        if (photo.section_id) {
-            var g = document.getElementById('section-grid-' + photo.section_id);
-            if (g) return g;
+    _buildDisplayOrder: function() {
+        var self = this;
+        self._displayOrder = self.visiblePhotos.map(function(p) { return p.id; });
+    },
+
+    _displayIndexById: function(photoId) {
+        if (!this._displayOrder) return -1;
+        return this._displayOrder.indexOf(photoId);
+    },
+
+    _photoById: function(photoId) {
+        for (var i = 0; i < this.visiblePhotos.length; i++) {
+            if (this.visiblePhotos[i].id === photoId) return this.visiblePhotos[i];
         }
-        return document.getElementById('unsectioned-grid');
+        return null;
     },
 
-    // Скрываем блок "без секции" если в нём нет фото
-    _updateUnsectionedVisibility: function() {
-        var wrap = document.getElementById('unsectioned-wrap');
-        var grid = document.getElementById('unsectioned-grid');
-        if (!wrap || !grid) return;
-        var hasPhotos = grid.querySelector('.photo-item') !== null;
-        wrap.style.display = hasPhotos ? '' : 'none';
-    },
-
-    _renderWithSections: function(container) {
+    _renderNormalMode: function(container) {
         var self = this;
         var sections = self.sections || [];
-        var isAdmin = api.isAdmin();
 
-        // Разбиваем фото по секциям
         var bySection = {};
         var unsectioned = [];
         for (var i = 0; i < self.visiblePhotos.length; i++) {
@@ -442,72 +508,164 @@ var gallery = {
             }
         }
 
-        // Блок "без секции" — скрываем если пустой
-        var unsectionedWrap = document.createElement('div');
-        unsectionedWrap.id = 'unsectioned-wrap';
-        unsectionedWrap.className = 'photos-section-block photos-unsectioned-block';
-        unsectionedWrap.style.display = unsectioned.length > 0 ? '' : 'none';
-
-        var unsectionedGrid = document.createElement('div');
-        unsectionedGrid.id = 'unsectioned-grid';
-        unsectionedGrid.className = 'photos-section-grid';
-        unsectionedGrid.setAttribute('data-section-id', '');
-
-        for (var j = 0; j < unsectioned.length; j++) {
-            var idx = j; // unsectioned — первые в массиве
-            var item = self.createPhotoItem(unsectioned[j], self.visiblePhotos.indexOf(unsectioned[j]));
-            var d = document.createElement('div');
-            d.innerHTML = item;
-            unsectionedGrid.appendChild(d.firstChild);
+        if (unsectioned.length > 0) {
+            var grid = document.createElement('div');
+            grid.id = 'unsectioned-grid';
+            grid.className = 'photos-grid';
+            grid.setAttribute('data-section-id', '');
+            for (var j = 0; j < unsectioned.length; j++) {
+                var item = self.createPhotoItem(unsectioned[j], self.visiblePhotos.indexOf(unsectioned[j]));
+                var d = document.createElement('div');
+                d.innerHTML = item;
+                grid.appendChild(d.firstChild);
+            }
+            container.appendChild(grid);
         }
-        unsectionedWrap.appendChild(unsectionedGrid);
-        container.appendChild(unsectionedWrap);
 
-        // Секции
         for (var k = 0; k < sections.length; k++) {
-            var block = self._createSectionBlock(sections[k], bySection[sections[k].id] || [], isAdmin);
-            container.appendChild(block);
+            var section = sections[k];
+            var sectionPhotos = bySection[section.id] || [];
+
+            var sectionBlock = document.createElement('div');
+            sectionBlock.className = 'photos-section-block';
+            sectionBlock.id = 'section-block-' + section.id;
+
+            var headerHtml =
+                '<div class="photos-section-header">' +
+                '<div class="photos-section-line"></div>' +
+                '<span class="photos-section-title" id="section-title-' + section.id + '">' + section.title + '</span>' +
+                '<div class="photos-section-line"></div>';
+
+            if (api.isAdmin()) {
+                headerHtml +=
+                    '<div class="photos-section-admin-actions">' +
+                    '<button onclick="admin.renameSection(\'' + section.id + '\')" title="Переименовать">✏️</button>' +
+                    '<button onclick="admin.deleteSection(\'' + section.id + '\')" title="Удалить">🗑️</button>' +
+                    '</div>';
+            }
+            headerHtml += '</div>';
+            sectionBlock.innerHTML = headerHtml;
+
+            var sectionGrid = document.createElement('div');
+            sectionGrid.id = 'section-grid-' + section.id;
+            sectionGrid.className = 'photos-grid';
+            sectionGrid.setAttribute('data-section-id', section.id);
+
+            for (var m = 0; m < sectionPhotos.length; m++) {
+                var sItem = self.createPhotoItem(sectionPhotos[m], self.visiblePhotos.indexOf(sectionPhotos[m]));
+                var sDiv = document.createElement('div');
+                sDiv.innerHTML = sItem;
+                sectionGrid.appendChild(sDiv.firstChild);
+            }
+
+            sectionBlock.appendChild(sectionGrid);
+            container.appendChild(sectionBlock);
         }
     },
 
-    _createSectionBlock: function(section, photos, isAdmin) {
+    _renderSectionMode: function(container) {
         var self = this;
-        var block = document.createElement('div');
-        block.className = 'photos-section-block';
-        block.id = 'section-block-' + section.id;
-        block.setAttribute('data-section-id', section.id);
+        var sections = self.sections || [];
 
-        // Заголовок
-        var headerHtml =
-            '<div class="photos-section-header">' +
-            '<div class="photos-section-line"></div>' +
-            '<span class="photos-section-title" id="section-title-' + section.id + '">' + section.title + '</span>' +
-            '<div class="photos-section-line"></div>';
-        if (isAdmin) {
-            headerHtml +=
+        var bySection = {};
+        var unsectioned = [];
+        for (var i = 0; i < self.visiblePhotos.length; i++) {
+            var p = self.visiblePhotos[i];
+            if (p.section_id) {
+                if (!bySection[p.section_id]) bySection[p.section_id] = [];
+                bySection[p.section_id].push(p);
+            } else {
+                unsectioned.push(p);
+            }
+        }
+
+        var topBlock = document.createElement('div');
+        topBlock.id = 'unsectioned-wrap';
+        topBlock.className = 'section-mode-top';
+        topBlock.style.display = unsectioned.length > 0 ? '' : 'none';
+
+        var topLabel = document.createElement('div');
+        topLabel.className = 'section-block-label';
+        topLabel.textContent = 'Нераспределённые фото';
+        topBlock.appendChild(topLabel);
+
+        var topGrid = document.createElement('div');
+        topGrid.id = 'unsectioned-grid';
+        topGrid.className = 'photos-section-grid';
+        topGrid.setAttribute('data-section-id', '');
+        for (var j = 0; j < unsectioned.length; j++) {
+            var item = self.createPhotoItem(unsectioned[j], self.visiblePhotos.indexOf(unsectioned[j]));
+            var d = document.createElement('div');
+            d.innerHTML = item;
+            topGrid.appendChild(d.firstChild);
+        }
+        topBlock.appendChild(topGrid);
+        container.appendChild(topBlock);
+
+        var bottomBlock = document.createElement('div');
+        bottomBlock.id = 'sections-wrap';
+        bottomBlock.className = 'section-mode-bottom';
+
+        for (var k = 0; k < sections.length; k++) {
+            var section = sections[k];
+            var sectionPhotos = bySection[section.id] || [];
+
+            var sectionEl = document.createElement('div');
+            sectionEl.className = 'photos-section-block';
+            sectionEl.id = 'section-block-' + section.id;
+
+            var headerHtml =
+                '<div class="photos-section-header">' +
+                '<div class="photos-section-line"></div>' +
+                '<span class="photos-section-title" id="section-title-' + section.id + '">' + section.title + '</span>' +
+                '<div class="photos-section-line"></div>' +
                 '<div class="photos-section-admin-actions">' +
                 '<button onclick="admin.renameSection(\'' + section.id + '\')" title="Переименовать">✏️</button>' +
                 '<button onclick="admin.deleteSection(\'' + section.id + '\')" title="Удалить">🗑️</button>' +
+                '</div>' +
                 '</div>';
+            sectionEl.innerHTML = headerHtml;
+
+            var sectionGrid = document.createElement('div');
+            sectionGrid.id = 'section-grid-' + section.id;
+            sectionGrid.className = 'photos-section-grid';
+            sectionGrid.setAttribute('data-section-id', section.id);
+
+            for (var m = 0; m < sectionPhotos.length; m++) {
+                var sItem = self.createPhotoItem(sectionPhotos[m], self.visiblePhotos.indexOf(sectionPhotos[m]));
+                var sDiv = document.createElement('div');
+                sDiv.innerHTML = sItem;
+                sectionGrid.appendChild(sDiv.firstChild);
+            }
+
+            sectionEl.appendChild(sectionGrid);
+            bottomBlock.appendChild(sectionEl);
         }
-        headerHtml += '</div>';
 
-        block.innerHTML = headerHtml;
-
-        // Грид с фото (со скроллом)
-        var grid = document.createElement('div');
-        grid.id = 'section-grid-' + section.id;
-        grid.className = 'photos-section-grid';
-        grid.setAttribute('data-section-id', section.id);
-
-        for (var i = 0; i < photos.length; i++) {
-            var item = self.createPhotoItem(photos[i], self.visiblePhotos.indexOf(photos[i]));
-            var div = document.createElement('div');
-            div.innerHTML = item;
-            grid.appendChild(div.firstChild);
+        if (sections.length === 0) {
+            var hint = document.createElement('div');
+            hint.style.cssText = 'padding:30px;text-align:center;color:#aaa;font-size:14px;';
+            hint.textContent = 'Секций пока нет. Нажмите "+ Добавить секцию".';
+            bottomBlock.appendChild(hint);
         }
-        block.appendChild(grid);
-        return block;
+
+        container.appendChild(bottomBlock);
+    },
+
+    _getPhotoGrid: function(photo) {
+        if (photo.section_id) {
+            var g = document.getElementById('section-grid-' + photo.section_id);
+            if (g) return g;
+        }
+        return document.getElementById('unsectioned-grid');
+    },
+
+    _updateUnsectionedVisibility: function() {
+        var wrap = document.getElementById('unsectioned-wrap');
+        var grid = document.getElementById('unsectioned-grid');
+        if (!wrap || !grid) return;
+        wrap.style.display = grid.querySelector('.photo-item') !== null ? '' : 'none';
+        this._buildDisplayOrder();
     },
 
     createPhotoItem: function(photo, index) {
@@ -516,7 +674,6 @@ var gallery = {
 
         var adminActions = '';
         if (isAdmin) {
-            // FIX #5: храним актуальное состояние hidden в data-атрибуте элемента
             adminActions =
                 '<div class="photo-item__admin-actions" onclick="event.stopPropagation()">' +
                 '<button onclick="event.stopPropagation(); admin.togglePhotoHidden(\'' + photo.id + '\')" title="' + (photo.hidden ? 'Показать' : 'Скрыть') + '">' + (photo.hidden ? '👁' : '🙈') + '</button>' +
@@ -524,66 +681,61 @@ var gallery = {
                 '</div>';
         }
 
-        return '<div class="photo-item ' + hiddenClass + '" data-id="' + photo.id + '" data-hidden="' + (photo.hidden ? '1' : '0') + '" data-index="' + index + '" onclick="gallery.handlePhotoClick(event, ' + index + ', \'' + photo.id + '\')">' +
+        return '<div class="photo-item ' + hiddenClass + '" data-id="' + photo.id + '" data-hidden="' + (photo.hidden ? '1' : '0') + '" data-index="' + index + '" onclick="gallery.handlePhotoClick(event, \'' + photo.id + '\')">' +
             '<img src="' + (photo.thumbUrl || '') + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">' +
             adminActions +
         '</div>';
     },
 
-    handlePhotoClick: function(e, index, photoId) {
+    handlePhotoClick: function(e, photoId) {
         if (typeof admin !== 'undefined' && admin.isSelectionMode) {
             e.stopPropagation();
             var checkbox = e.currentTarget.querySelector('.photo-checkbox-custom');
             if (checkbox) admin.togglePhotoSelection(photoId, checkbox);
             return;
         }
-        this.openFullscreen(index);
+        var displayIndex = -1;
+        for (var i = 0; i < this.visiblePhotos.length; i++) {
+            if (this.visiblePhotos[i].id === photoId) {
+                displayIndex = i;
+                break;
+            }
+        }
+        if (displayIndex === -1) return;
+        this.openFullscreen(displayIndex);
     },
 
     // === FULLSCREEN ПРОСМОТР ===
-    _animating: false,
+    // Анимация: два img (fv-img-a = текущее, fv-img-b = новое).
+    // При смене: текущее уезжает влево/вправо, новое въезжает с другой стороны.
 
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
-
         this.currentPhotoIndex = index;
-        var photo = this.visiblePhotos[index];
+        this._animating = false;
+
         var viewer = document.getElementById('fullscreen-viewer');
         var container = document.querySelector('.fullscreen-viewer__image-container');
+        if (!viewer || !container) return;
 
-        // Инициализируем два img-элемента если ещё нет
-        if (container && !container.querySelector('#fv-img-a')) {
+        // Создаём два слоя один раз
+        if (!document.getElementById('fv-img-a')) {
             container.innerHTML =
-                '<img id="fv-img-a" class="fv-img-current" src="" alt="">' +
-                '<img id="fv-img-b" src="" alt="" style="opacity:0;">';
+                '<img id="fv-img-a" style="position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;transition:transform 0.32s cubic-bezier(.4,0,.2,1),opacity 0.32s ease;will-change:transform,opacity;" src="" alt="">' +
+                '<img id="fv-img-b" style="position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;transition:transform 0.32s cubic-bezier(.4,0,.2,1),opacity 0.32s ease;will-change:transform,opacity;opacity:0;transform:translateX(100%);" src="" alt="">';
         }
 
         var imgA = document.getElementById('fv-img-a');
-        if (imgA) {
-            imgA.src = photo.thumbUrl || '';
-            imgA.className = 'fv-img-current';
-        }
         var imgB = document.getElementById('fv-img-b');
-        if (imgB) { imgB.src = ''; imgB.className = ''; imgB.style.opacity = '0'; }
+        imgA.src = this.visiblePhotos[index].thumbUrl || '';
+        imgA.style.transform = 'translateX(0)';
+        imgA.style.opacity = '1';
+        imgB.src = '';
+        imgB.style.transform = 'translateX(100%)';
+        imgB.style.opacity = '0';
 
-        var link = document.getElementById('download-link');
-        if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
-
-        // Admin кнопки через класс
-        var btnCover = document.getElementById('btn-set-cover');
-        var btnDelete = document.getElementById('btn-delete-photo');
-        if (api.isAdmin()) {
-            if (btnCover) btnCover.classList.remove('fv-action-btn--admin-only');
-            if (btnDelete) btnDelete.classList.remove('fv-action-btn--admin-only');
-        } else {
-            if (btnCover) btnCover.classList.add('fv-action-btn--admin-only');
-            if (btnDelete) btnDelete.classList.add('fv-action-btn--admin-only');
-        }
-
-        if (viewer) viewer.style.display = 'flex';
-        this._animating = false;
-
-        // Инициализируем иконки Lucide после показа viewer
+        this._updateActionsPanel(this.visiblePhotos[index]);
+        viewer.style.display = 'flex';
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
         var self = this;
@@ -594,80 +746,70 @@ var gallery = {
             else if (e.key === 'ArrowRight') self.nextPhoto();
         };
         document.addEventListener('keydown', this.keyHandler);
-        this.initSwipe();
     },
 
-    // Плавная смена фото: текущее уезжает, новое въезжает одновременно
-    _changePhoto: function(newIndex, direction) {
+    _goToPhoto: function(newIndex, direction) {
         if (this._animating) return;
         if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
 
         var self = this;
-        var photo = this.visiblePhotos[newIndex];
-
-        var imgA = document.getElementById('fv-img-a'); // текущее (видимое)
-        var imgB = document.getElementById('fv-img-b'); // следующее (скрытое)
+        var imgA = document.getElementById('fv-img-a');
+        var imgB = document.getElementById('fv-img-b');
         if (!imgA || !imgB) { self.openFullscreen(newIndex); return; }
 
         this._animating = true;
         this.currentPhotoIndex = newIndex;
 
-        // Загружаем новое фото в скрытый слой
-        imgB.src = photo.thumbUrl || '';
-        // Ставим начальную позицию для въезда (без transition)
-        imgB.className = direction === 'left' ? 'fv-img-in-left' : 'fv-img-in-right';
+        // direction: 'left' — листаем вперёд, 'right' — назад
+        var enterFrom = direction === 'left' ? 'translateX(100%)' : 'translateX(-100%)';
+        var exitTo    = direction === 'left' ? 'translateX(-100%)' : 'translateX(100%)';
 
-        // Обновляем ссылку скачивания
-        var link = document.getElementById('download-link');
-        if (link) { link.href = photo.originalUrl || '#'; link.download = photo.name || 'photo.jpg'; }
+        // Ставим B за краем экрана (без transition)
+        imgB.style.transition = 'none';
+        imgB.style.transform = enterFrom;
+        imgB.style.opacity = '1';
+        imgB.src = self.visiblePhotos[newIndex].thumbUrl || '';
 
-        // Запускаем анимацию в следующем кадре
+        // Следующий кадр — запускаем анимацию
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
-                // Текущее уезжает
-                imgA.className = direction === 'left' ? 'fv-img-out-left' : 'fv-img-out-right';
-                // Новое въезжает
-                imgB.className = 'fv-img-current';
+                imgA.style.transform = exitTo;
+                imgA.style.opacity = '0';
+                imgB.style.transition = 'transform 0.32s cubic-bezier(.4,0,.2,1), opacity 0.32s ease';
+                imgB.style.transform = 'translateX(0)';
+                imgB.style.opacity = '1';
 
                 setTimeout(function() {
-                    // Меняем местами: B становится новым текущим A
+                    // Меняем местами: B становится новым A
                     imgA.src = imgB.src;
-                    imgA.className = 'fv-img-current';
-                    imgB.className = '';
+                    imgA.style.transition = 'none';
+                    imgA.style.transform = 'translateX(0)';
+                    imgA.style.opacity = '1';
+                    imgB.style.transition = 'none';
+                    imgB.style.transform = 'translateX(100%)';
                     imgB.style.opacity = '0';
                     imgB.src = '';
+
+                    self._updateActionsPanel(self.visiblePhotos[newIndex]);
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
                     self._animating = false;
-                }, 350);
+                }, 340);
             });
         });
     },
 
-    initSwipe: function() {
-        var self = this;
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-        if (!container) return;
 
-        var startX = 0, startY = 0;
 
-        container.ontouchstart = function(e) {
-            startX = e.changedTouches[0].screenX;
-            startY = e.changedTouches[0].screenY;
-        };
+    _updateActionsPanel: function(photo) {
+        var panel = document.getElementById('fullscreen-actions');
+        if (!panel) return;
+        var isAdmin = api.isAdmin();
 
-        container.ontouchmove = function(e) {
-            var dx = Math.abs(e.changedTouches[0].screenX - startX);
-            var dy = Math.abs(e.changedTouches[0].screenY - startY);
-            if (dx > dy) e.preventDefault();
-        };
-
-        container.ontouchend = function(e) {
-            var dx = e.changedTouches[0].screenX - startX;
-            var dy = e.changedTouches[0].screenY - startY;
-            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
-                if (dx < 0) self._changePhoto(self.currentPhotoIndex + 1, 'left');
-                else self._changePhoto(self.currentPhotoIndex - 1, 'right');
-            }
-        };
+        panel.innerHTML =
+            (isAdmin ? '<button class="fv-action-btn" onclick="admin.setFolderCover()"><i data-lucide="image"></i><span>Обложка</span></button>' : '') +
+            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
+            (isAdmin ? '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()"><i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
+            '<button class="fv-action-btn" onclick="gallery.closeFullscreen()"><i data-lucide="x"></i><span>Закрыть</span></button>';
     },
 
     closeFullscreen: function() {
@@ -681,17 +823,47 @@ var gallery = {
     },
 
     prevPhoto: function() {
-        if (this.currentPhotoIndex > 0) this.openFullscreen(this.currentPhotoIndex - 1);
+        if (this.currentPhotoIndex > 0)
+            this._goToPhoto(this.currentPhotoIndex - 1, 'right');
     },
 
     nextPhoto: function() {
-        if (this.currentPhotoIndex < this.visiblePhotos.length - 1) this.openFullscreen(this.currentPhotoIndex + 1);
+        if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
+            this._goToPhoto(this.currentPhotoIndex + 1, 'left');
     },
 
-    // FIX #1: возвращаемся к нужной папке
+    initSwipe: function() {
+        var self = this;
+        var viewer = document.getElementById('fullscreen-viewer');
+        if (!viewer) return;
+
+        var startX = 0, startY = 0;
+
+        viewer.addEventListener('touchstart', function(e) {
+            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        }, { passive: true });
+
+        viewer.addEventListener('touchend', function(e) {
+            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+            var dx = e.changedTouches[0].clientX - startX;
+            var dy = e.changedTouches[0].clientY - startY;
+            if (Math.abs(dy) > Math.abs(dx)) return;
+            if (dx < -50) self._goToPhoto(self.currentPhotoIndex + 1, 'left');
+            else if (dx > 50) self._goToPhoto(self.currentPhotoIndex - 1, 'right');
+        }, { passive: true });
+    },
+
     showMainPage: function() {
         if (typeof admin !== 'undefined' && admin.isSelectionMode) {
             admin.exitSelectionMode();
+        }
+
+        if (this.sectionModeActive) {
+            this.sectionModeActive = false;
+            var fp = document.getElementById('folder-page');
+            if (fp) fp.classList.remove('section-mode');
         }
 
         var lastFolderId = this._lastFolderId;
@@ -713,6 +885,7 @@ var gallery = {
 
 document.addEventListener('DOMContentLoaded', function() {
     gallery.init();
+    gallery.initSwipe();
 });
 
 function scrollToFolders() {

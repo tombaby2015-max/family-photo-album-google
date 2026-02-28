@@ -1,20 +1,54 @@
 // gallery.js — показывает папки и фото (Google Drive версия)
 //
-// ОПТИМИЗАЦИЯ: добавлен localStorage кеш для папок
-// Логика "сначала показать из кеша, потом проверить на сервере"
-//
-// Всё остальное не изменилось:
-// - роли посетитель/администратор
-// - секции внутри папок
-// - батчевая загрузка по 40 фото
-// - обложка с настройкой позиции
-// - hash в URL (#folder=ID)
-// - полноэкранный просмотр, свайпы, клавиши
-
+// ИЗМЕНЕНИЯ:
+// 1. Добавлена регистрация Service Worker (sw.js)
+//    SW кеширует миниатюры в Cache Storage браузера — работает быстрее localStorage,
+//    не сбрасывается при деплоях воркера, живёт пока браузер сам не очистит кеш.
+// 2. Добавлена диагностика: gallery.debugCacheStats() в консоли
+// 3. Логика localStorage кеша для папок не изменилась
 
 // Настройки кеша
 var CACHE_KEY_FOLDERS = 'photo_cache_folders';
 var CACHE_TTL = 30 * 60 * 1000; // 30 минут в миллисекундах
+
+// ==========================================
+// SERVICE WORKER — регистрация
+//
+// sw.js должен лежать в корне сайта (рядом с index.html)
+// чтобы его scope охватывал весь сайт.
+// ==========================================
+(function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) {
+    console.log('[SW] Service Worker не поддерживается этим браузером');
+    return;
+  }
+
+  navigator.serviceWorker.register('/sw.js').then(function(registration) {
+    console.log('[SW] Зарегистрирован, scope:', registration.scope);
+
+    // Если есть обновление SW — активируем его
+    registration.addEventListener('updatefound', function() {
+      var newWorker = registration.installing;
+      newWorker.addEventListener('statechange', function() {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          console.log('[SW] Доступно обновление Service Worker');
+        }
+      });
+    });
+  }).catch(function(err) {
+    console.warn('[SW] Ошибка регистрации:', err);
+  });
+
+  // Слушаем сообщения от SW
+  navigator.serviceWorker.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'CACHE_CLEARED') {
+      console.log('[SW] Кеш миниатюр был очищен');
+    }
+    if (event.data && event.data.type === 'CACHE_STATS') {
+      console.log('[SW] Кеш миниатюр: ' + event.data.count + ' файлов в кеше "' + event.data.cacheName + '"');
+    }
+  });
+})();
 
 var gallery = {
     folders: [],
@@ -29,16 +63,35 @@ var gallery = {
     sectionModeActive: false,
 
     // ==========================================
-    // КЕШ ПАПОК
+    // ДИАГНОСТИКА КЕША
+    // Вызови gallery.debugCacheStats() в консоли браузера
+    // чтобы увидеть сколько миниатюр закешировано
+    // ==========================================
+    debugCacheStats: function() {
+      if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+        console.warn('[Debug] Service Worker не активен');
+        return;
+      }
+      navigator.serviceWorker.controller.postMessage({ type: 'GET_CACHE_STATS' });
+      console.log('[Debug] Запрос статистики отправлен, смотри следующее сообщение...');
+    },
+
+    // Очистить кеш миниатюр (например после синхронизации с Drive)
+    clearThumbCache: function() {
+      if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return;
+      navigator.serviceWorker.controller.postMessage({ type: 'CLEAR_THUMB_CACHE' });
+      console.log('[Cache] Команда очистки кеша миниатюр отправлена');
+    },
+
+    // ==========================================
+    // КЕШ ПАПОК (localStorage)
     // Сохраняем список папок в localStorage браузера.
-    // При следующем открытии — показываем мгновенно из кеша,
+    // При повторном открытии — показываем мгновенно из кеша,
     // фоном тихо загружаем свежие данные с сервера.
     // Если данные изменились — обновляем страницу незаметно.
     // ==========================================
 
-    // Сохранить папки в кеш
     _saveFoldersToCache: function(folders) {
-        // Администраторам не кешируем — им всегда нужны актуальные данные
         if (api.isAdmin()) return;
         try {
             var entry = {
@@ -46,20 +99,15 @@ var gallery = {
                 timestamp: Date.now()
             };
             localStorage.setItem(CACHE_KEY_FOLDERS, JSON.stringify(entry));
-        } catch(e) {
-            // localStorage может быть недоступен (приватный режим и т.д.) — игнорируем
-        }
+        } catch(e) {}
     },
 
-    // Прочитать папки из кеша
-    // Возвращает массив папок или null если кеш устарел/отсутствует
     _loadFoldersFromCache: function() {
         if (api.isAdmin()) return null;
         try {
             var raw = localStorage.getItem(CACHE_KEY_FOLDERS);
             if (!raw) return null;
             var entry = JSON.parse(raw);
-            // Проверяем не устарел ли кеш
             if (Date.now() - entry.timestamp > CACHE_TTL) {
                 localStorage.removeItem(CACHE_KEY_FOLDERS);
                 return null;
@@ -70,11 +118,12 @@ var gallery = {
         }
     },
 
-    // Сбросить кеш (вызывается после синхронизации или изменений)
     clearFoldersCache: function() {
         try {
             localStorage.removeItem(CACHE_KEY_FOLDERS);
         } catch(e) {}
+        // Также очищаем кеш миниатюр при полном сбросе
+        this.clearThumbCache();
     },
 
     // ==========================================
@@ -108,38 +157,27 @@ var gallery = {
 
     // ==========================================
     // ЗАГРУЗКА ПАПОК — с кешем
-    //
-    // Шаг 1: Мгновенно показываем из кеша (если есть)
-    // Шаг 2: Фоном загружаем с сервера
-    // Шаг 3: Если данные отличаются — обновляем страницу
     // ==========================================
     loadFolders: function() {
         var self = this;
         var container = document.getElementById('folders-container');
 
-        // Пробуем загрузить из кеша
         var cached = self._loadFoldersFromCache();
 
         if (cached && cached.length > 0) {
-            // Есть кеш — показываем мгновенно
             self.folders = cached;
             self.renderFolders();
 
-            // Фоном тихо загружаем свежие данные
             api.getFolders().then(function(freshFolders) {
-                // Сравниваем с кешем — изменилось ли что-то?
                 if (self._foldersChanged(cached, freshFolders)) {
-                    // Данные изменились — обновляем
                     self.folders = freshFolders;
                     self._saveFoldersToCache(freshFolders);
                     self.renderFolders();
                 } else {
-                    // Ничего не изменилось — просто обновляем временную метку кеша
                     self._saveFoldersToCache(freshFolders);
                 }
             });
         } else {
-            // Кеша нет — обычная загрузка с индикатором
             if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
             api.getFolders().then(function(folders) {
                 self.folders = folders;
@@ -149,7 +187,6 @@ var gallery = {
         }
     },
 
-    // Сравниваем два списка папок — изменилось ли что-то важное
     _foldersChanged: function(oldFolders, newFolders) {
         if (oldFolders.length !== newFolders.length) return true;
         for (var i = 0; i < newFolders.length; i++) {
@@ -169,7 +206,7 @@ var gallery = {
     },
 
     // ==========================================
-    // РЕНДЕР ПАПОК — не изменился
+    // РЕНДЕР ПАПОК
     // ==========================================
     renderFolders: function() {
         var self = this;
@@ -262,7 +299,6 @@ var gallery = {
                 '</div>';
         }
 
-        // Счётчик фото: для админа показываем полное число (включая скрытые)
         var photoCount = isAdmin
             ? (folder.photo_count_admin || folder.photo_count || 0)
             : (folder.photo_count || 0);
@@ -345,7 +381,6 @@ var gallery = {
             cover_scale: self.previewState.scale
         }).then(function() {
             self.editingFolder = null;
-            // Сбрасываем кеш — обложка изменилась
             self.clearFoldersCache();
             self.loadFolders();
         });
@@ -400,7 +435,6 @@ var gallery = {
     },
 
     // === ЗАГРУЗКА ФОТО ===
-    // Загружаем все фото папки за один запрос (после оптимизации KV структуры)
     loadPhotos: function(folderId) {
         var self = this;
         var container = document.getElementById('photos-container');
@@ -707,13 +741,7 @@ var gallery = {
     },
 
     // === FULLSCREEN ПРОСМОТР ===
-    // Анимация: «лента» из трёх слоёв (prev / curr / next).
-    // _fvSlot — индекс «активного» слота (0, 1 или 2), циклически меняется.
-    // Каждый слот — это <img> с position:absolute внутри overflow:hidden контейнера.
-    // При переходе вперёд:  текущий уезжает влево (-100%), новый въезжает справа (+100%).
-    // При переходе назад:  текущий уезжает вправо (+100%), новый въезжает слева (-100%).
-
-    _fvSlot: 0,   // индекс активного img-слота (0..2)
+    _fvSlot: 0,
 
     _fvImgs: function() {
         return [
@@ -740,7 +768,6 @@ var gallery = {
         var container = document.querySelector('.fullscreen-viewer__image-container');
         if (!viewer || !container) return;
 
-        // Создаём три слоя один раз
         if (!document.getElementById('fv-img-0')) {
             var baseStyle = 'position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;will-change:transform;';
             container.innerHTML =
@@ -749,7 +776,6 @@ var gallery = {
                 '<img id="fv-img-2" style="' + baseStyle + 'transform:translateX(100%);" src="" alt="">';
         }
 
-        // Сброс: все слоты убираем за правый край, активный (slot 0) — в центр
         this._fvSlot = 0;
         var imgs = this._fvImgs();
         for (var i = 0; i < 3; i++) {
@@ -762,11 +788,9 @@ var gallery = {
         this._updateActionsPanel(this.visiblePhotos[index]);
         viewer.style.display = 'flex';
 
-        // Зоны нажатия на краях — только для мобильных (nav-кнопки на мобиле скрыты)
         if (!document.getElementById('fv-tap-prev')) {
             var tapPrev = document.createElement('div');
             tapPrev.id = 'fv-tap-prev';
-            // -webkit-tap-highlight-color убирает вспышку при нажатии на iOS/Android
             tapPrev.style.cssText = 'position:absolute;left:0;top:0;width:25%;height:100%;z-index:3;cursor:pointer;display:none;-webkit-tap-highlight-color:transparent;user-select:none;';
             var tapNext = document.createElement('div');
             tapNext.id = 'fv-tap-next';
@@ -777,7 +801,7 @@ var gallery = {
                 wrapper.appendChild(tapNext);
             }
         }
-        // Показываем tap-зоны только на мобильных (когда nav скрыт)
+
         var isMobile = window.innerWidth <= 768;
         var tapP = document.getElementById('fv-tap-prev');
         var tapN = document.getElementById('fv-tap-next');
@@ -809,15 +833,10 @@ var gallery = {
         var currSlot = this._fvSlot;
         var nextSlot = (currSlot + 1) % 3;
 
-        // direction: 'left' — вперёд, 'right' — назад
-        // Старое уезжает на ±60%, новое стартует с ±160% —
-        // итого между ними всегда зазор ~100% (ширина контейнера).
-        // Они движутся параллельно, но никогда не соприкасаются.
         var exitTo    = direction === 'left' ? -60  :  60;
         var enterFrom = direction === 'left' ? 160  : -160;
-        var DURATION  = 280; // мс — одна длительность для обоих
+        var DURATION  = 280;
 
-        // Ставим новое фото за краем без анимации
         imgs[nextSlot].src = self.visiblePhotos[newIndex].thumbUrl || '';
         imgs[nextSlot].style.transition = 'none';
         imgs[nextSlot].style.transform  = 'translateX(' + enterFrom + '%)';
@@ -827,18 +846,15 @@ var gallery = {
             requestAnimationFrame(function() {
                 var timing = 'transform ' + DURATION + 'ms cubic-bezier(.4,0,.2,1), opacity ' + DURATION + 'ms ease';
 
-                // Старое: едет в сторону + затемняется
                 imgs[currSlot].style.transition = timing;
                 imgs[currSlot].style.transform  = 'translateX(' + exitTo + '%)';
                 imgs[currSlot].style.opacity    = '0';
 
-                // Новое: одновременно едет к центру + появляется
                 imgs[nextSlot].style.transition = timing;
                 imgs[nextSlot].style.transform  = 'translateX(0)';
                 imgs[nextSlot].style.opacity    = '1';
 
                 setTimeout(function() {
-                    // Убираем старый слот
                     imgs[currSlot].style.transition = 'none';
                     imgs[currSlot].style.transform  = 'translateX(100%)';
                     imgs[currSlot].style.opacity    = '1';
@@ -853,8 +869,6 @@ var gallery = {
             });
         });
     },
-
-
 
     _updateActionsPanel: function(photo) {
         var panel = document.getElementById('fullscreen-actions');
@@ -911,7 +925,6 @@ var gallery = {
             var absDx = Math.abs(dx);
             var absDy = Math.abs(dy);
 
-            // Короткий тап (без существенного движения) — на краевых зонах
             if (absDx < 15 && absDy < 15 && dt < 300) {
                 var tapP = document.getElementById('fv-tap-prev');
                 var tapN = document.getElementById('fv-tap-next');
@@ -924,7 +937,6 @@ var gallery = {
                 return;
             }
 
-            // Свайп — горизонталь должна явно преобладать над вертикалью
             if (absDy > absDx * 0.8) return;
             if (absDx < 40) return;
             if (dx < 0) self._goToPhoto(self.currentPhotoIndex + 1, 'left');

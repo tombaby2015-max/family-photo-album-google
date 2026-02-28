@@ -1,7 +1,7 @@
 {
   "id": "/family-photo-album-google/",
   "name": "Семейный фотоальбом",
-  "short_name": "Фотоальбом",
+  "short_name": "Семейный фотоальбом",
   "description": "Семейный фотоархив",
   "start_url": "/family-photo-album-google/",
   "scope": "/family-photo-album-google/",

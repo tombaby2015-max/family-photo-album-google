@@ -1,20 +1,6 @@
-// gallery.js — показывает папки и фото (Google Drive версия)
-//
-// ОПТИМИЗАЦИЯ: добавлен localStorage кеш для папок
-// Логика "сначала показать из кеша, потом проверить на сервере"
-//
-// Всё остальное не изменилось:
-// - роли посетитель/администратор
-// - секции внутри папок
-// - батчевая загрузка по 40 фото
-// - обложка с настройкой позиции
-// - hash в URL (#folder=ID)
-// - полноэкранный просмотр, свайпы, клавиши
+// gallery.js — показывает папки и фото (Google Drive версия) 
 
-
-// Настройки кеша
-var CACHE_KEY_FOLDERS = 'photo_cache_folders';
-var CACHE_TTL = 30 * 60 * 1000; // 30 минут в миллисекундах
+var BATCH_SIZE = 40;
 
 var gallery = {
     folders: [],
@@ -28,58 +14,6 @@ var gallery = {
     sections: [],
     sectionModeActive: false,
 
-    // ==========================================
-    // КЕШ ПАПОК
-    // Сохраняем список папок в localStorage браузера.
-    // При следующем открытии — показываем мгновенно из кеша,
-    // фоном тихо загружаем свежие данные с сервера.
-    // Если данные изменились — обновляем страницу незаметно.
-    // ==========================================
-
-    // Сохранить папки в кеш
-    _saveFoldersToCache: function(folders) {
-        // Администраторам не кешируем — им всегда нужны актуальные данные
-        if (api.isAdmin()) return;
-        try {
-            var entry = {
-                folders: folders,
-                timestamp: Date.now()
-            };
-            localStorage.setItem(CACHE_KEY_FOLDERS, JSON.stringify(entry));
-        } catch(e) {
-            // localStorage может быть недоступен (приватный режим и т.д.) — игнорируем
-        }
-    },
-
-    // Прочитать папки из кеша
-    // Возвращает массив папок или null если кеш устарел/отсутствует
-    _loadFoldersFromCache: function() {
-        if (api.isAdmin()) return null;
-        try {
-            var raw = localStorage.getItem(CACHE_KEY_FOLDERS);
-            if (!raw) return null;
-            var entry = JSON.parse(raw);
-            // Проверяем не устарел ли кеш
-            if (Date.now() - entry.timestamp > CACHE_TTL) {
-                localStorage.removeItem(CACHE_KEY_FOLDERS);
-                return null;
-            }
-            return entry.folders || null;
-        } catch(e) {
-            return null;
-        }
-    },
-
-    // Сбросить кеш (вызывается после синхронизации или изменений)
-    clearFoldersCache: function() {
-        try {
-            localStorage.removeItem(CACHE_KEY_FOLDERS);
-        } catch(e) {}
-    },
-
-    // ==========================================
-    // ИНИЦИАЛИЗАЦИЯ
-    // ==========================================
     init: function() {
         var self = this;
         var hash = window.location.hash;
@@ -95,7 +29,6 @@ var gallery = {
         var self = this;
         api.getFolders().then(function(folders) {
             self.folders = folders;
-            self._saveFoldersToCache(folders);
             self.renderFolders();
             var folder = null;
             for (var i = 0; i < folders.length; i++) {
@@ -106,71 +39,16 @@ var gallery = {
         });
     },
 
-    // ==========================================
-    // ЗАГРУЗКА ПАПОК — с кешем
-    //
-    // Шаг 1: Мгновенно показываем из кеша (если есть)
-    // Шаг 2: Фоном загружаем с сервера
-    // Шаг 3: Если данные отличаются — обновляем страницу
-    // ==========================================
     loadFolders: function() {
         var self = this;
         var container = document.getElementById('folders-container');
-
-        // Пробуем загрузить из кеша
-        var cached = self._loadFoldersFromCache();
-
-        if (cached && cached.length > 0) {
-            // Есть кеш — показываем мгновенно
-            self.folders = cached;
+        if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
+        api.getFolders().then(function(folders) {
+            self.folders = folders;
             self.renderFolders();
-
-            // Фоном тихо загружаем свежие данные
-            api.getFolders().then(function(freshFolders) {
-                // Сравниваем с кешем — изменилось ли что-то?
-                if (self._foldersChanged(cached, freshFolders)) {
-                    // Данные изменились — обновляем
-                    self.folders = freshFolders;
-                    self._saveFoldersToCache(freshFolders);
-                    self.renderFolders();
-                } else {
-                    // Ничего не изменилось — просто обновляем временную метку кеша
-                    self._saveFoldersToCache(freshFolders);
-                }
-            });
-        } else {
-            // Кеша нет — обычная загрузка с индикатором
-            if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
-            api.getFolders().then(function(folders) {
-                self.folders = folders;
-                self._saveFoldersToCache(folders);
-                self.renderFolders();
-            });
-        }
+        });
     },
 
-    // Сравниваем два списка папок — изменилось ли что-то важное
-    _foldersChanged: function(oldFolders, newFolders) {
-        if (oldFolders.length !== newFolders.length) return true;
-        for (var i = 0; i < newFolders.length; i++) {
-            var nf = newFolders[i];
-            var of_ = null;
-            for (var j = 0; j < oldFolders.length; j++) {
-                if (oldFolders[j].id === nf.id) { of_ = oldFolders[j]; break; }
-            }
-            if (!of_) return true;
-            if (of_.title !== nf.title) return true;
-            if (of_.hidden !== nf.hidden) return true;
-            if (of_.photo_count !== nf.photo_count) return true;
-            if (of_.cover_url !== nf.cover_url) return true;
-            if (of_.order !== nf.order) return true;
-        }
-        return false;
-    },
-
-    // ==========================================
-    // РЕНДЕР ПАПОК — не изменился
-    // ==========================================
     renderFolders: function() {
         var self = this;
         var container = document.getElementById('folders-container');
@@ -262,14 +140,9 @@ var gallery = {
                 '</div>';
         }
 
-        // Счётчик фото: для админа показываем полное число (включая скрытые)
-        var photoCount = isAdmin
-            ? (folder.photo_count_admin || folder.photo_count || 0)
-            : (folder.photo_count || 0);
-
         return '<li id="folder-' + folder.id + '" class="t214__col t-item t-card__col t-col t-col_4 folder-card ' + hiddenClass + (isEditing ? ' editing' : '') + '" data-folder-id="' + folder.id + '">' +
             '<div class="folder-card__image" id="folder-image-' + folder.id + '" style="background-color:#eee;">' +
-                '<div class="folder-card__title">' + folder.title + (photoCount > 0 ? ' <span style="font-size:13px;opacity:0.8;font-weight:400;">(' + photoCount + ' фото)</span>' : '') + '</div>' +
+                '<div class="folder-card__title">' + folder.title + (folder.photo_count > 0 ? ' <span style="font-size:13px;opacity:0.8;font-weight:400;">(' + folder.photo_count + ' фото)</span>' : '') + '</div>' +
                 adminActions +
                 previewEditor +
             '</div>' +
@@ -345,8 +218,6 @@ var gallery = {
             cover_scale: self.previewState.scale
         }).then(function() {
             self.editingFolder = null;
-            // Сбрасываем кеш — обложка изменилась
-            self.clearFoldersCache();
             self.loadFolders();
         });
     },
@@ -387,7 +258,7 @@ var gallery = {
             window.location.hash = 'folder=' + folder.id;
         }
 
-        this.loadPhotos(folder.id);
+        this.loadPhotos(folder.id, 0);
     },
 
     _resetSectionModeButtons: function() {
@@ -400,15 +271,16 @@ var gallery = {
     },
 
     // === ЗАГРУЗКА ФОТО ===
-    // Загружаем все фото папки за один запрос (после оптимизации KV структуры)
-    loadPhotos: function(folderId) {
+    loadPhotos: function(folderId, offset) {
         var self = this;
         var container = document.getElementById('photos-container');
 
-        if (container) container.innerHTML = '<div class="loading">Загрузка фото...</div>';
-        self.currentPhotos = [];
-        self.visiblePhotos = [];
-        self.sections = [];
+        if (offset === 0) {
+            if (container) container.innerHTML = '<div class="loading">Загрузка фото...</div>';
+            self.currentPhotos = [];
+            self.visiblePhotos = [];
+            self.sections = [];
+        }
 
         Promise.all([
             api.getPhotosList(folderId),
@@ -417,22 +289,37 @@ var gallery = {
             var allPhotos = results[0];
             self.sections = results[1] || [];
             self.currentPhotos = allPhotos;
-            self.visiblePhotos = allPhotos.slice();
 
-            if (allPhotos.length === 0) {
-                if (container) container.innerHTML = '<div class="empty-state"><h4>В этой папке пока нет фото</h4></div>';
+            var batch = allPhotos.slice(offset, offset + BATCH_SIZE);
+            if (batch.length === 0) {
+                if (offset === 0 && container) {
+                    container.innerHTML = '<div class="empty-state"><h4>В этой папке пока нет фото</h4></div>';
+                }
                 return;
             }
 
-            api.getPhotosThumbnails(folderId, allPhotos).then(function(thumbUrls) {
-                for (var i = 0; i < allPhotos.length; i++) {
-                    allPhotos[i].thumbUrl = thumbUrls[allPhotos[i].id] || '';
-                    var folderName = (gallery.currentFolder && gallery.currentFolder.title) ? encodeURIComponent(gallery.currentFolder.title) : '';
-                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName;
+            api.getPhotosThumbnails(folderId, batch).then(function(thumbUrls) {
+                for (var i = 0; i < batch.length; i++) {
+                    batch[i].thumbUrl = thumbUrls[batch[i].id] || '';
+                    batch[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + batch[i].file_id + '&size=original';
                 }
 
-                if (container) container.innerHTML = '';
-                self.renderPhotos(0);
+                if (offset === 0 && container) {
+                    container.innerHTML = '';
+                } else {
+                    var oldBtn = document.getElementById('load-more-container');
+                    if (oldBtn) oldBtn.remove();
+                }
+
+                for (var j = 0; j < batch.length; j++) {
+                    self.visiblePhotos.push(batch[j]);
+                }
+
+                self.renderPhotos(offset);
+
+                if (offset + BATCH_SIZE < allPhotos.length) {
+                    self.showLoadMoreButton(folderId, offset + BATCH_SIZE, allPhotos);
+                }
 
                 if (api.isAdmin() && self.sectionModeActive) {
                     setTimeout(function() {
@@ -441,8 +328,27 @@ var gallery = {
                 }
             });
         }).catch(function() {
-            if (container) container.innerHTML = '<p>Ошибка загрузки</p>';
+            if (offset === 0 && container) {
+                container.innerHTML = '<p>Ошибка загрузки</p>';
+            }
         });
+    },
+
+    showLoadMoreButton: function(folderId, nextOffset, allPhotos) {
+        var self = this;
+        var container = document.getElementById('photos-container');
+        if (!container) return;
+
+        var div = document.createElement('div');
+        div.id = 'load-more-container';
+        div.style.cssText = 'text-align:center;padding:20px;';
+        div.innerHTML = '<button id="load-more-btn" style="padding:15px 30px;background:rgba(0,0,0,0.05);border:none;border-radius:8px;cursor:pointer;color:#666;font-size:16px;">+ Загрузить ещё фото</button>';
+        container.appendChild(div);
+
+        document.getElementById('load-more-btn').onclick = function() {
+            this.textContent = 'Загружается...';
+            self.loadPhotos(folderId, nextOffset);
+        };
     },
 
     // === РЕНДЕР ФОТО ===
@@ -477,6 +383,8 @@ var gallery = {
 
     _buildDisplayOrder: function() {
         var self = this;
+        // Порядок листания = порядок visiblePhotos (как пришли с сервера).
+        // Не перегруппируем по секциям — это ломало порядок.
         self._displayOrder = self.visiblePhotos.map(function(p) { return p.id; });
     },
 
@@ -492,6 +400,7 @@ var gallery = {
         return null;
     },
 
+    // ОБЫЧНЫЙ РЕЖИМ
     _renderNormalMode: function(container) {
         var self = this;
         var sections = self.sections || [];
@@ -563,6 +472,7 @@ var gallery = {
         }
     },
 
+    // РЕЖИМ СЕКЦИЙ (только десктоп, только админ)
     _renderSectionMode: function(container) {
         var self = this;
         var sections = self.sections || [];
@@ -694,6 +604,7 @@ var gallery = {
             if (checkbox) admin.togglePhotoSelection(photoId, checkbox);
             return;
         }
+        // Ищем индекс в visiblePhotos напрямую по id — самый надёжный способ
         var displayIndex = -1;
         for (var i = 0; i < this.visiblePhotos.length; i++) {
             if (this.visiblePhotos[i].id === photoId) {
@@ -705,37 +616,25 @@ var gallery = {
         this.openFullscreen(displayIndex);
     },
 
-    // === FULLSCREEN ПРОСМОТР ===
-    // Анимация: два img (fv-img-a = текущее, fv-img-b = новое).
-    // При смене: текущее уезжает влево/вправо, новое въезжает с другой стороны.
+    // ============================================================
+    // ============================================================
+    // FULLSCREEN ПРОСМОТР
+    // Одна <img>, меняем src. Свайп только добавляет жест.
+    // Порядок = visiblePhotos[0..N] — никакой дополнительной логики.
+    // ============================================================
 
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
         this.currentPhotoIndex = index;
-        this._animating = false;
 
         var viewer = document.getElementById('fullscreen-viewer');
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-        if (!viewer || !container) return;
+        var img = document.getElementById('fv-main-img');
+        if (!viewer || !img) return;
 
-        // Создаём два слоя один раз
-        if (!document.getElementById('fv-img-a')) {
-            container.innerHTML =
-                '<img id="fv-img-a" style="position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;transition:transform 0.32s cubic-bezier(.4,0,.2,1),opacity 0.32s ease;will-change:transform,opacity;" src="" alt="">' +
-                '<img id="fv-img-b" style="position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;transition:transform 0.32s cubic-bezier(.4,0,.2,1),opacity 0.32s ease;will-change:transform,opacity;opacity:0;transform:translateX(100%);" src="" alt="">';
-        }
-
-        var imgA = document.getElementById('fv-img-a');
-        var imgB = document.getElementById('fv-img-b');
-        imgA.src = this.visiblePhotos[index].thumbUrl || '';
-        imgA.style.transform = 'translateX(0)';
-        imgA.style.opacity = '1';
-        imgB.src = '';
-        imgB.style.transform = 'translateX(100%)';
-        imgB.style.opacity = '0';
+        img.src = this.visiblePhotos[index].thumbUrl || '';
+        viewer.style.display = 'flex';
 
         this._updateActionsPanel(this.visiblePhotos[index]);
-        viewer.style.display = 'flex';
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
         var self = this;
@@ -748,66 +647,22 @@ var gallery = {
         document.addEventListener('keydown', this.keyHandler);
     },
 
-    _goToPhoto: function(newIndex, direction) {
-        if (this._animating) return;
-        if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
-
-        var self = this;
-        var imgA = document.getElementById('fv-img-a');
-        var imgB = document.getElementById('fv-img-b');
-        if (!imgA || !imgB) { self.openFullscreen(newIndex); return; }
-
-        this._animating = true;
-        this.currentPhotoIndex = newIndex;
-
-        // direction: 'left' — листаем вперёд, 'right' — назад
-        var enterFrom = direction === 'left' ? 'translateX(100%)' : 'translateX(-100%)';
-        var exitTo    = direction === 'left' ? 'translateX(-100%)' : 'translateX(100%)';
-
-        // Ставим B за краем экрана (без transition)
-        imgB.style.transition = 'none';
-        imgB.style.transform = enterFrom;
-        imgB.style.opacity = '1';
-        imgB.src = self.visiblePhotos[newIndex].thumbUrl || '';
-
-        // Следующий кадр — запускаем анимацию
-        requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-                imgA.style.transform = exitTo;
-                imgA.style.opacity = '0';
-                imgB.style.transition = 'transform 0.32s cubic-bezier(.4,0,.2,1), opacity 0.32s ease';
-                imgB.style.transform = 'translateX(0)';
-                imgB.style.opacity = '1';
-
-                setTimeout(function() {
-                    // Меняем местами: B становится новым A
-                    imgA.src = imgB.src;
-                    imgA.style.transition = 'none';
-                    imgA.style.transform = 'translateX(0)';
-                    imgA.style.opacity = '1';
-                    imgB.style.transition = 'none';
-                    imgB.style.transform = 'translateX(100%)';
-                    imgB.style.opacity = '0';
-                    imgB.src = '';
-
-                    self._updateActionsPanel(self.visiblePhotos[newIndex]);
-                    if (typeof lucide !== 'undefined') lucide.createIcons();
-                    self._animating = false;
-                }, 340);
-            });
-        });
+    _goToPhoto: function(index) {
+        if (index < 0 || index >= this.visiblePhotos.length) return;
+        this.currentPhotoIndex = index;
+        var img = document.getElementById('fv-main-img');
+        if (img) img.src = this.visiblePhotos[index].thumbUrl || '';
+        this._updateActionsPanel(this.visiblePhotos[index]);
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     },
-
-
 
     _updateActionsPanel: function(photo) {
         var panel = document.getElementById('fullscreen-actions');
         if (!panel) return;
         var isAdmin = api.isAdmin();
-
         panel.innerHTML =
             (isAdmin ? '<button class="fv-action-btn" onclick="admin.setFolderCover()"><i data-lucide="image"></i><span>Обложка</span></button>' : '') +
-            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
+            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '" download="' + (photo.name || 'photo.jpg') + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
             (isAdmin ? '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()"><i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
             '<button class="fv-action-btn" onclick="gallery.closeFullscreen()"><i data-lucide="x"></i><span>Закрыть</span></button>';
     },
@@ -815,7 +670,6 @@ var gallery = {
     closeFullscreen: function() {
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'none';
-        this._animating = false;
         if (this.keyHandler) {
             document.removeEventListener('keydown', this.keyHandler);
             this.keyHandler = null;
@@ -824,38 +678,55 @@ var gallery = {
 
     prevPhoto: function() {
         if (this.currentPhotoIndex > 0)
-            this._goToPhoto(this.currentPhotoIndex - 1, 'right');
+            this._goToPhoto(this.currentPhotoIndex - 1);
     },
 
     nextPhoto: function() {
         if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
-            this._goToPhoto(this.currentPhotoIndex + 1, 'left');
+            this._goToPhoto(this.currentPhotoIndex + 1);
     },
 
+    // Инициализируется ОДИН РАЗ при DOMContentLoaded
     initSwipe: function() {
         var self = this;
         var viewer = document.getElementById('fullscreen-viewer');
         if (!viewer) return;
 
-        var startX = 0, startY = 0;
+        var startX = 0, startY = 0, moved = false;
 
         viewer.addEventListener('touchstart', function(e) {
             if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
+            moved = false;
         }, { passive: true });
 
         viewer.addEventListener('touchend', function(e) {
             if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
             var dx = e.changedTouches[0].clientX - startX;
             var dy = e.changedTouches[0].clientY - startY;
+
+            // Игнорируем вертикальные жесты
             if (Math.abs(dy) > Math.abs(dx)) return;
-            if (dx < -50) self._goToPhoto(self.currentPhotoIndex + 1, 'left');
-            else if (dx > 50) self._goToPhoto(self.currentPhotoIndex - 1, 'right');
+
+            var W = window.innerWidth;
+
+            if (Math.abs(dx) < 15) {
+                // Тап — навигация по зонам экрана
+                var tapX = e.changedTouches[0].clientX;
+                if (tapX < W * 0.25) self.prevPhoto();
+                else if (tapX > W * 0.75) self.nextPhoto();
+            } else if (dx < -W * 0.2) {
+                // Свайп влево — следующее
+                self.nextPhoto();
+            } else if (dx > W * 0.2) {
+                // Свайп вправо — предыдущее
+                self.prevPhoto();
+            }
         }, { passive: true });
     },
 
-    showMainPage: function() {
+        showMainPage: function() {
         if (typeof admin !== 'undefined' && admin.isSelectionMode) {
             admin.exitSelectionMode();
         }

@@ -715,6 +715,7 @@ var gallery = {
         if (!viewer || !img) return;
 
         img.src = this.visiblePhotos[index].thumbUrl || '';
+        img.className = 'fv-img-current';
         viewer.style.display = 'flex';
 
         this._updateActionsPanel(this.visiblePhotos[index]);
@@ -730,13 +731,54 @@ var gallery = {
         document.addEventListener('keydown', this.keyHandler);
     },
 
-    _goToPhoto: function(index) {
+    _goToPhoto: function(index, direction) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
-        this.currentPhotoIndex = index;
+
+        var self = this;
         var img = document.getElementById('fv-main-img');
-        if (img) img.src = this.visiblePhotos[index].thumbUrl || '';
-        this._updateActionsPanel(this.visiblePhotos[index]);
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        if (!img) return;
+
+        var prevIndex = this.currentPhotoIndex;
+        this.currentPhotoIndex = index;
+
+        // Определяем направление если не передано явно
+        if (direction === undefined) {
+            direction = index > prevIndex ? 'next' : 'prev';
+        }
+
+        var exitClass   = direction === 'next' ? 'fv-img-exit-left'       : 'fv-img-exit-right';
+        var enterClass  = direction === 'next' ? 'fv-img-enter-from-right' : 'fv-img-enter-from-left';
+
+        // Шаг 1: текущее фото уходит
+        img.classList.remove('fv-img-current');
+        img.classList.add(exitClass);
+
+        // Шаг 2: создаём новое фото поверх, оно стартует за краем экрана
+        var newImg = document.createElement('img');
+        newImg.id = 'fv-main-img-next';
+        newImg.src = self.visiblePhotos[index].thumbUrl || '';
+        newImg.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;position:absolute;top:0;left:0;width:100%;height:100%;';
+        newImg.classList.add(enterClass);
+
+        var container = img.parentNode;
+        container.appendChild(newImg);
+
+        // Шаг 3: через один кадр запускаем анимацию входа
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                newImg.classList.remove(enterClass);
+                newImg.classList.add('fv-img-current');
+            });
+        });
+
+        // Шаг 4: после анимации убираем старое фото, переименовываем новое
+        setTimeout(function() {
+            if (img.parentNode) img.parentNode.removeChild(img);
+            newImg.id = 'fv-main-img';
+            newImg.classList.remove('fv-img-current');
+            self._updateActionsPanel(self.visiblePhotos[index]);
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }, 350);
     },
 
     _updateActionsPanel: function(photo) {
@@ -762,12 +804,12 @@ var gallery = {
 
     prevPhoto: function() {
         if (this.currentPhotoIndex > 0)
-            this._goToPhoto(this.currentPhotoIndex - 1);
+            this._goToPhoto(this.currentPhotoIndex - 1, 'prev');
     },
 
     nextPhoto: function() {
         if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
-            this._goToPhoto(this.currentPhotoIndex + 1);
+            this._goToPhoto(this.currentPhotoIndex + 1, 'next');
     },
 
     initSwipe: function() {

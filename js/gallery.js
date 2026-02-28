@@ -23,7 +23,7 @@ var CACHE_TTL = 30 * 60 * 1000; // 30 минут в миллисекундах
     return;
   }
 
-  navigator.serviceWorker.register('/sw.js').then(function(registration) {
+  navigator.serviceWorker.register('/family-photo-album-google/sw.js').then(function(registration) {
     console.log('[SW] Зарегистрирован, scope:', registration.scope);
 
     // Если есть обновление SW — активируем его

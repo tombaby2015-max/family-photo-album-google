@@ -706,20 +706,36 @@ var gallery = {
     },
 
     // === FULLSCREEN ПРОСМОТР ===
+    // Анимация: два img (fv-img-a = текущее, fv-img-b = новое).
+    // При смене: текущее уезжает влево/вправо, новое въезжает с другой стороны.
 
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
         this.currentPhotoIndex = index;
+        this._animating = false;
 
         var viewer = document.getElementById('fullscreen-viewer');
-        var img = document.getElementById('fv-main-img');
-        if (!viewer || !img) return;
+        var container = document.querySelector('.fullscreen-viewer__image-container');
+        if (!viewer || !container) return;
 
-        img.src = this.visiblePhotos[index].thumbUrl || '';
-        img.style.opacity = '1';
-        viewer.style.display = 'flex';
+        // Создаём два слоя один раз
+        if (!document.getElementById('fv-img-a')) {
+            container.innerHTML =
+                '<img id="fv-img-a" style="position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;transition:transform 0.32s cubic-bezier(.4,0,.2,1),opacity 0.32s ease;will-change:transform,opacity;" src="" alt="">' +
+                '<img id="fv-img-b" style="position:absolute;max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;transition:transform 0.32s cubic-bezier(.4,0,.2,1),opacity 0.32s ease;will-change:transform,opacity;opacity:0;transform:translateX(100%);" src="" alt="">';
+        }
+
+        var imgA = document.getElementById('fv-img-a');
+        var imgB = document.getElementById('fv-img-b');
+        imgA.src = this.visiblePhotos[index].thumbUrl || '';
+        imgA.style.transform = 'translateX(0)';
+        imgA.style.opacity = '1';
+        imgB.src = '';
+        imgB.style.transform = 'translateX(100%)';
+        imgB.style.opacity = '0';
 
         this._updateActionsPanel(this.visiblePhotos[index]);
+        viewer.style.display = 'flex';
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
         var self = this;
@@ -732,26 +748,54 @@ var gallery = {
         document.addEventListener('keydown', this.keyHandler);
     },
 
-    // Плавная смена фото: fade out → смена src → fade in
-    _goToPhoto: function(newIndex) {
+    _goToPhoto: function(newIndex, direction) {
+        if (this._animating) return;
         if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
-        var self = this;
-        var img = document.getElementById('fv-main-img');
-        if (!img) return;
 
+        var self = this;
+        var imgA = document.getElementById('fv-img-a');
+        var imgB = document.getElementById('fv-img-b');
+        if (!imgA || !imgB) { self.openFullscreen(newIndex); return; }
+
+        this._animating = true;
         this.currentPhotoIndex = newIndex;
 
-        // Затухаем
-        img.style.transition = 'opacity 0.2s ease';
-        img.style.opacity = '0';
+        // direction: 'left' — листаем вперёд, 'right' — назад
+        var enterFrom = direction === 'left' ? 'translateX(100%)' : 'translateX(-100%)';
+        var exitTo    = direction === 'left' ? 'translateX(-100%)' : 'translateX(100%)';
 
-        setTimeout(function() {
-            img.src = self.visiblePhotos[newIndex].thumbUrl || '';
-            self._updateActionsPanel(self.visiblePhotos[newIndex]);
-            if (typeof lucide !== 'undefined') lucide.createIcons();
-            // Появляемся
-            img.style.opacity = '1';
-        }, 200);
+        // Ставим B за краем экрана (без transition)
+        imgB.style.transition = 'none';
+        imgB.style.transform = enterFrom;
+        imgB.style.opacity = '1';
+        imgB.src = self.visiblePhotos[newIndex].thumbUrl || '';
+
+        // Следующий кадр — запускаем анимацию
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() {
+                imgA.style.transform = exitTo;
+                imgA.style.opacity = '0';
+                imgB.style.transition = 'transform 0.32s cubic-bezier(.4,0,.2,1), opacity 0.32s ease';
+                imgB.style.transform = 'translateX(0)';
+                imgB.style.opacity = '1';
+
+                setTimeout(function() {
+                    // Меняем местами: B становится новым A
+                    imgA.src = imgB.src;
+                    imgA.style.transition = 'none';
+                    imgA.style.transform = 'translateX(0)';
+                    imgA.style.opacity = '1';
+                    imgB.style.transition = 'none';
+                    imgB.style.transform = 'translateX(100%)';
+                    imgB.style.opacity = '0';
+                    imgB.src = '';
+
+                    self._updateActionsPanel(self.visiblePhotos[newIndex]);
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    self._animating = false;
+                }, 340);
+            });
+        });
     },
 
 
@@ -771,6 +815,7 @@ var gallery = {
     closeFullscreen: function() {
         var viewer = document.getElementById('fullscreen-viewer');
         if (viewer) viewer.style.display = 'none';
+        this._animating = false;
         if (this.keyHandler) {
             document.removeEventListener('keydown', this.keyHandler);
             this.keyHandler = null;
@@ -779,12 +824,12 @@ var gallery = {
 
     prevPhoto: function() {
         if (this.currentPhotoIndex > 0)
-            this._goToPhoto(this.currentPhotoIndex - 1);
+            this._goToPhoto(this.currentPhotoIndex - 1, 'right');
     },
 
     nextPhoto: function() {
         if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
-            this._goToPhoto(this.currentPhotoIndex + 1);
+            this._goToPhoto(this.currentPhotoIndex + 1, 'left');
     },
 
     initSwipe: function() {
@@ -805,8 +850,8 @@ var gallery = {
             var dx = e.changedTouches[0].clientX - startX;
             var dy = e.changedTouches[0].clientY - startY;
             if (Math.abs(dy) > Math.abs(dx)) return;
-            if (dx < -50) self.nextPhoto();
-            else if (dx > 50) self.prevPhoto();
+            if (dx < -50) self._goToPhoto(self.currentPhotoIndex + 1, 'left');
+            else if (dx > 50) self._goToPhoto(self.currentPhotoIndex - 1, 'right');
         }, { passive: true });
     },
 

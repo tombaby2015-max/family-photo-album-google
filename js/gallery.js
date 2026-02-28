@@ -428,7 +428,8 @@ var gallery = {
                 for (var i = 0; i < allPhotos.length; i++) {
                     allPhotos[i].thumbUrl = thumbUrls[allPhotos[i].id] || '';
                     var folderName = (gallery.currentFolder && gallery.currentFolder.title) ? encodeURIComponent(gallery.currentFolder.title) : '';
-                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName;
+                    var photoName = encodeURIComponent(allPhotos[i].name || 'photo.jpg');
+                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName + '&name=' + photoName;
                 }
 
                 if (container) container.innerHTML = '';

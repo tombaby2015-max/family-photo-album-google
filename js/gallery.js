@@ -706,61 +706,20 @@ var gallery = {
     },
 
     // === FULLSCREEN ПРОСМОТР ===
-    // Механизм: три img слоя (prev, current, next) выстроены в ряд.
-    // При свайпе весь ряд тянется за пальцем — как настоящая листалка.
-    // При отпускании либо долетает до следующего фото, либо возвращается.
-
-    _fvInit: function() {
-        var container = document.querySelector('.fullscreen-viewer__image-container');
-        if (!container || container.querySelector('#fv-strip')) return;
-
-        // Полоса из трёх фото: [prev][current][next]
-        var strip = document.createElement('div');
-        strip.id = 'fv-strip';
-        strip.style.cssText = 'display:flex;width:300%;height:100%;will-change:transform;';
-
-        ['fv-prev','fv-curr','fv-next'].forEach(function(id) {
-            var img = document.createElement('img');
-            img.id = id;
-            img.style.cssText = 'width:33.333%;height:100%;object-fit:contain;flex-shrink:0;pointer-events:none;border-radius:4px;';
-            strip.appendChild(img);
-        });
-
-        container.innerHTML = '';
-        container.style.overflow = 'hidden';
-        container.style.touchAction = 'pan-y';
-        container.appendChild(strip);
-    },
-
-    _fvLoad: function(index) {
-        var photos = this.visiblePhotos;
-        var prev = document.getElementById('fv-prev');
-        var curr = document.getElementById('fv-curr');
-        var next = document.getElementById('fv-next');
-        var strip = document.getElementById('fv-strip');
-        if (!strip) return;
-
-        if (prev) prev.src = (index > 0 && photos[index-1]) ? (photos[index-1].thumbUrl || '') : '';
-        if (curr) curr.src = photos[index] ? (photos[index].thumbUrl || '') : '';
-        if (next) next.src = (index < photos.length-1 && photos[index+1]) ? (photos[index+1].thumbUrl || '') : '';
-
-        // Центрируем на текущем фото (без анимации)
-        strip.style.transition = 'none';
-        strip.style.transform = 'translateX(-33.333%)';
-    },
 
     openFullscreen: function(index) {
         if (index < 0 || index >= this.visiblePhotos.length) return;
-
         this.currentPhotoIndex = index;
-        var viewer = document.getElementById('fullscreen-viewer');
-        if (!viewer) return;
 
-        this._fvInit();
-        this._fvLoad(index);
-        this._updateActionsPanel(this.visiblePhotos[index]);
+        var viewer = document.getElementById('fullscreen-viewer');
+        var img = document.getElementById('fv-main-img');
+        if (!viewer || !img) return;
+
+        img.src = this.visiblePhotos[index].thumbUrl || '';
+        img.style.opacity = '1';
         viewer.style.display = 'flex';
 
+        this._updateActionsPanel(this.visiblePhotos[index]);
         if (typeof lucide !== 'undefined') lucide.createIcons();
 
         var self = this;
@@ -773,25 +732,26 @@ var gallery = {
         document.addEventListener('keydown', this.keyHandler);
     },
 
+    // Плавная смена фото: fade out → смена src → fade in
     _goToPhoto: function(newIndex) {
         if (newIndex < 0 || newIndex >= this.visiblePhotos.length) return;
-        var strip = document.getElementById('fv-strip');
-        if (!strip) return;
-
-        var direction = newIndex > this.currentPhotoIndex ? 'left' : 'right';
-        var targetX = direction === 'left' ? '-66.666%' : '0%';
-
-        // Анимируем сдвиг
-        strip.style.transition = 'transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1)';
-        strip.style.transform = 'translateX(' + targetX + ')';
-
         var self = this;
+        var img = document.getElementById('fv-main-img');
+        if (!img) return;
+
+        this.currentPhotoIndex = newIndex;
+
+        // Затухаем
+        img.style.transition = 'opacity 0.2s ease';
+        img.style.opacity = '0';
+
         setTimeout(function() {
-            self.currentPhotoIndex = newIndex;
-            self._fvLoad(newIndex);
+            img.src = self.visiblePhotos[newIndex].thumbUrl || '';
             self._updateActionsPanel(self.visiblePhotos[newIndex]);
             if (typeof lucide !== 'undefined') lucide.createIcons();
-        }, 360);
+            // Появляемся
+            img.style.opacity = '1';
+        }, 200);
     },
 
 
@@ -818,11 +778,13 @@ var gallery = {
     },
 
     prevPhoto: function() {
-        this._goToPhoto(this.currentPhotoIndex - 1);
+        if (this.currentPhotoIndex > 0)
+            this._goToPhoto(this.currentPhotoIndex - 1);
     },
 
     nextPhoto: function() {
-        this._goToPhoto(this.currentPhotoIndex + 1);
+        if (this.currentPhotoIndex < this.visiblePhotos.length - 1)
+            this._goToPhoto(this.currentPhotoIndex + 1);
     },
 
     initSwipe: function() {
@@ -830,88 +792,22 @@ var gallery = {
         var viewer = document.getElementById('fullscreen-viewer');
         if (!viewer) return;
 
-        var startX = 0, startY = 0, isDragging = false, isHoriz = null;
-        var containerW = 0;
+        var startX = 0, startY = 0;
 
-        function getStrip() { return document.getElementById('fv-strip'); }
+        viewer.addEventListener('touchstart', function(e) {
+            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        }, { passive: true });
 
-        function onStart(e) {
-            if (e.target.closest && (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav'))) return;
-            startX = e.type === 'mousedown' ? e.clientX : e.touches[0].clientX;
-            startY = e.type === 'mousedown' ? e.clientY : e.touches[0].clientY;
-            isDragging = true;
-            isHoriz = null;
-            var container = document.querySelector('.fullscreen-viewer__image-container');
-            containerW = container ? container.clientWidth : window.innerWidth;
-            var strip = getStrip();
-            if (strip) strip.style.transition = 'none';
-        }
-
-        function onMove(e) {
-            if (!isDragging) return;
-            var x = e.type === 'mousemove' ? e.clientX : e.touches[0].clientX;
-            var y = e.type === 'mousemove' ? e.clientY : e.touches[0].clientY;
-            var dx = x - startX;
-            var dy = y - startY;
-
-            // Определяем направление жеста один раз
-            if (isHoriz === null && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
-                isHoriz = Math.abs(dx) > Math.abs(dy);
-            }
-            if (!isHoriz) return;
-            if (e.cancelable) e.preventDefault();
-
-            // Тянем полосу за пальцем
-            var baseOffset = -33.333;
-            var pct = (dx / containerW) * 100;
-
-            // Сопротивление на краях (первое/последнее фото)
-            var idx = self.currentPhotoIndex;
-            var total = self.visiblePhotos.length;
-            if ((dx > 0 && idx === 0) || (dx < 0 && idx === total - 1)) {
-                pct = pct * 0.2; // резиновый эффект
-            }
-
-            var strip = getStrip();
-            if (strip) strip.style.transform = 'translateX(' + (baseOffset + pct) + '%)';
-        }
-
-        function onEnd(e) {
-            if (!isDragging) return;
-            isDragging = false;
-            if (!isHoriz) return;
-
-            var x = e.type === 'mouseup' || e.type === 'mouseleave'
-                ? e.clientX
-                : (e.changedTouches ? e.changedTouches[0].clientX : startX);
-            var dx = x - startX;
-            var threshold = containerW * 0.25;
-
-            if (dx < -threshold) {
-                self.nextPhoto();
-            } else if (dx > threshold) {
-                self.prevPhoto();
-            } else {
-                // Возвращаем на место
-                var strip = getStrip();
-                if (strip) {
-                    strip.style.transition = 'transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1)';
-                    strip.style.transform = 'translateX(-33.333%)';
-                }
-            }
-        }
-
-        // Touch
-        viewer.addEventListener('touchstart', onStart, { passive: true });
-        viewer.addEventListener('touchmove',  onMove,  { passive: false });
-        viewer.addEventListener('touchend',   onEnd,   { passive: true });
-        viewer.addEventListener('touchcancel',onEnd,   { passive: true });
-
-        // Mouse (для ПК)
-        viewer.addEventListener('mousedown',  onStart);
-        viewer.addEventListener('mousemove',  onMove);
-        viewer.addEventListener('mouseup',    onEnd);
-        viewer.addEventListener('mouseleave', onEnd);
+        viewer.addEventListener('touchend', function(e) {
+            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+            var dx = e.changedTouches[0].clientX - startX;
+            var dy = e.changedTouches[0].clientY - startY;
+            if (Math.abs(dy) > Math.abs(dx)) return;
+            if (dx < -50) self.nextPhoto();
+            else if (dx > 50) self.prevPhoto();
+        }, { passive: true });
     },
 
     showMainPage: function() {

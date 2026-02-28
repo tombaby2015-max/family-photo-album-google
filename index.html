@@ -17,11 +17,19 @@
     <link rel="stylesheet" href="https://static.tildacdn.ink/css/tilda-cards-1.0.min.css" type="text/css" media="all" />
     <link rel="stylesheet" href="https://static.tildacdn.ink/css/fonts-tildasans.css" type="text/css" media="all" />
 
+    <!-- PWA: добавление на рабочий стол / главный экран -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#000000">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Фотоальбом">
+    <link rel="apple-touch-icon" href="https://static.tildacdn.ink/tild3730-6566-4766-b165-306164333335/photo-1499002238440-.jpg">
+
     <!-- Наши стили -->
     <link rel="stylesheet" href="css/custom.css" type="text/css" media="all" />
 
     <!-- SortableJS для перетаскивания папок -->
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.js"></script>
 
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -91,7 +99,69 @@
             </div>
         </div>
 
-        <!-- ПАПКИ -->
+        <!-- БЛОК "ДОБАВИТЬ НА ГЛАВНЫЙ ЭКРАН" — показывается всем гостям -->
+    <div id="pwa-install-bar" style="background:#1a1a1a; padding:32px 0; display:block;">
+        <div class="t-container">
+            <div class="t-col t-col_12" style="text-align:center;">
+
+                <div style="color:#fff; font-size:18px; font-weight:600; margin-bottom:8px; letter-spacing:0.02em;">
+                    📱 Добавьте альбом на главный экран
+                </div>
+                <div style="color:rgba(255,255,255,0.55); font-size:14px; margin-bottom:28px;">
+                    Открывайте одним касанием, как обычное приложение
+                </div>
+
+                <!-- Три колонки с инструкцией -->
+                <div id="pwa-instructions" style="display:flex; flex-wrap:wrap; justify-content:center; gap:16px; max-width:720px; margin:0 auto 24px;">
+
+                    <!-- iPhone / iPad -->
+                    <div style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:20px 24px; min-width:200px; flex:1; text-align:left;">
+                        <div style="font-size:22px; margin-bottom:8px;">🍎</div>
+                        <div style="color:#fff; font-size:14px; font-weight:600; margin-bottom:10px;">iPhone / iPad</div>
+                        <div style="color:rgba(255,255,255,0.7); font-size:13px; line-height:1.7;">
+                            1. Нажмите
+                            <svg style="display:inline;vertical-align:middle;margin:0 2px;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                            <strong style="color:#fff;">Поделиться</strong><br>
+                            2. Выберите <strong style="color:#fff;">«На экран Домой»</strong><br>
+                            3. Нажмите <strong style="color:#fff;">Добавить</strong>
+                        </div>
+                    </div>
+
+                    <!-- Android -->
+                    <div style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:20px 24px; min-width:200px; flex:1; text-align:left;">
+                        <div style="font-size:22px; margin-bottom:8px;">🤖</div>
+                        <div style="color:#fff; font-size:14px; font-weight:600; margin-bottom:10px;">Android</div>
+                        <div style="color:rgba(255,255,255,0.7); font-size:13px; line-height:1.7;">
+                            1. Нажмите <strong style="color:#fff;">⋮</strong> меню браузера<br>
+                            2. Выберите <strong style="color:#fff;">«Добавить на гл. экран»</strong><br>
+                            3. Нажмите <strong style="color:#fff;">Добавить</strong>
+                        </div>
+                    </div>
+
+                    <!-- ПК -->
+                    <div style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:20px 24px; min-width:200px; flex:1; text-align:left;">
+                        <div style="font-size:22px; margin-bottom:8px;">💻</div>
+                        <div style="color:#fff; font-size:14px; font-weight:600; margin-bottom:10px;">Chrome / Edge на ПК</div>
+                        <div style="color:rgba(255,255,255,0.7); font-size:13px; line-height:1.7;">
+                            1. Нажмите <strong style="color:#fff;">⋮</strong> меню браузера<br>
+                            2. Выберите <strong style="color:#fff;">«Установить Фотоальбом»</strong><br>
+                            3. Нажмите <strong style="color:#fff;">Установить</strong>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Кнопка скрыть -->
+                <button onclick="document.getElementById('pwa-install-bar').style.display='none'; localStorage.setItem('pwa_dismissed','1');"
+                    style="background:none; border:none; color:rgba(255,255,255,0.35); font-size:13px; cursor:pointer; padding:4px 12px;">
+                    Скрыть
+                </button>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- ПАПКИ -->
         <div id="rec-folders" class="r t-rec t-rec_pt_30" style="padding-top:30px;" data-record-type="147">
             <div class="t214">
                 <ul id="folders-container" class="t214__container t-card__container t-container t-container_flex">
@@ -138,7 +208,10 @@
                         Выбрать фото
                     </button>
                     <button class="admin-btn" id="btn-enable-sections" onclick="admin.enableSectionMode()" style="width:100%;margin-bottom:10px;">
-                        📂 Разбить на секции
+                        📂 Режим секций
+                    </button>
+                    <button class="admin-btn" id="btn-exit-sections" onclick="admin.exitSectionMode()" style="width:100%;margin-bottom:10px;display:none;">
+                        ✕ Выйти из секций
                     </button>
                     <button class="admin-btn" id="btn-add-section" onclick="admin.addSection()" style="width:100%;margin-bottom:10px;display:none;">
                         + Добавить секцию
@@ -147,6 +220,7 @@
                         <button class="admin-btn" id="btn-select-all" onclick="admin.toggleSelectAll()" style="width:100%;">Выбрать все</button>
                         <button class="admin-btn danger" id="btn-delete-selected" onclick="admin.deleteSelectedPhotos()" disabled style="width:100%;opacity:0.5;">Удалить выбранные (0)</button>
                         <button class="admin-btn" id="btn-hide-selected" onclick="admin.hideSelectedPhotos(true)" disabled style="width:100%;opacity:0.5;">Скрыть выбранные (0)</button>
+                        <button class="admin-btn" id="btn-move-to-section" onclick="admin.moveSelectedToSection()" disabled style="width:100%;opacity:0.5;display:none;">📂 Переместить в секцию</button>
                         <button class="admin-btn" onclick="admin.exitSelectionMode()" style="width:100%;">✕ Отмена</button>
                     </div>
                 </div>
@@ -188,34 +262,20 @@
     </div>
 
     <!-- ПОЛНОЭКРАННЫЙ ПРОСМОТР ФОТО -->
+    <!-- Кнопки "Обложка" и "Удалить" создаются динамически в gallery.js — только для админа -->
     <div id="fullscreen-viewer" class="fullscreen-viewer" style="display:none;">
         <div class="fullscreen-viewer__overlay" onclick="gallery.closeFullscreen()"></div>
 
-        <!-- Кнопки в правом верхнем углу -->
+        <!-- Панель кнопок — заполняется через JS в зависимости от роли -->
         <div class="fullscreen-viewer__actions" id="fullscreen-actions">
-            <button class="fv-action-btn fv-action-btn--admin-only" id="btn-set-cover" onclick="admin.setFolderCover()" title="Превью папки">
-                <i data-lucide="image"></i>
-                <span>Обложка</span>
-            </button>
-            <a id="download-link" class="fv-action-btn" href="" download title="Скачать оригинал">
-                <i data-lucide="download"></i>
-                <span>Скачать</span>
-            </a>
-            <button class="fv-action-btn fv-action-btn--danger fv-action-btn--admin-only" id="btn-delete-photo" onclick="admin.deleteCurrentPhoto()" title="Удалить">
-                <i data-lucide="trash-2"></i>
-                <span>Удалить</span>
-            </button>
-            <button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">
-                <i data-lucide="x"></i>
-                <span>Закрыть</span>
-            </button>
+            <!-- Содержимое создаётся динамически в gallery.openFullscreen() -->
         </div>
 
         <div class="fullscreen-viewer__wrapper">
             <button class="fullscreen-viewer__nav fullscreen-viewer__prev" onclick="gallery.prevPhoto()">‹</button>
             <div class="fullscreen-viewer__image-container">
-                <!-- img элементы создаются динамически в gallery.js -->
-            </div>
+    <!-- fv-img-a и fv-img-b создаются динамически в gallery.openFullscreen() -->
+</div>
             <button class="fullscreen-viewer__nav fullscreen-viewer__next" onclick="gallery.nextPhoto()">›</button>
         </div>
     </div>
@@ -227,9 +287,26 @@
         </div>
     </div>
 
+    <!-- PWA скрипт -->
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var bar = document.getElementById('pwa-install-bar');
+        if (!bar) return;
+
+        // Скрываем если: уже установлено, администратор, или гость нажал "Скрыть"
+        var isInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        var isDismissed = localStorage.getItem('pwa_dismissed') === '1';
+        var isAdmin = !!localStorage.getItem('admin_token');
+
+        if (isInstalled || isDismissed || isAdmin) {
+            bar.style.display = 'none';
+        }
+    });
+    </script>
+
     <!-- Скрипты -->
     <script src="js/api.js?v=3"></script>
-    <script src="js/gallery.js?v=3"></script>
-    <script src="js/admin.js?v=3"></script>
+    <script src="js/gallery.js?v=4"></script>
+    <script src="js/admin.js?v=4"></script>
 </body>
 </html>

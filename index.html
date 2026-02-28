@@ -99,29 +99,64 @@
             </div>
         </div>
 
-        <!-- КНОПКА "ДОБАВИТЬ НА ЭКРАН" -->
-    <div id="pwa-install-bar" style="display:none; background:rgba(0,0,0,0.85); padding:16px 0;">
+        <!-- БЛОК "ДОБАВИТЬ НА ГЛАВНЫЙ ЭКРАН" — показывается всем гостям -->
+    <div id="pwa-install-bar" style="background:#1a1a1a; padding:32px 0; display:block;">
         <div class="t-container">
             <div class="t-col t-col_12" style="text-align:center;">
-                <!-- Кнопка для Android/Chrome/Edge/ПК -->
-                <button id="pwa-install-btn" onclick="pwa.install()" style="
-                    display:none; align-items:center; gap:10px;
-                    padding:14px 28px; border-radius:50px;
-                    background:rgba(255,255,255,0.15); backdrop-filter:blur(10px);
-                    border:1px solid rgba(255,255,255,0.4); color:#fff;
-                    font-size:15px; cursor:pointer; transition:background 0.2s;
-                " onmouseover="this.style.background='rgba(255,255,255,0.25)'"
-                   onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v13M5 9l7 7 7-7"/><path d="M3 20h18"/></svg>
-                    Добавить на главный экран
-                </button>
-                <!-- Подсказка для Safari/iPhone -->
-                <div id="pwa-safari-hint" style="display:none; color:rgba(255,255,255,0.9); font-size:14px; line-height:1.8;">
-                    Чтобы добавить на главный экран:<br>
-                    нажмите <strong>Поделиться</strong>
-                    <svg style="display:inline;vertical-align:middle;margin:0 2px;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
-                    → <strong>На экран «Домой»</strong>
+
+                <div style="color:#fff; font-size:18px; font-weight:600; margin-bottom:8px; letter-spacing:0.02em;">
+                    📱 Добавьте альбом на главный экран
                 </div>
+                <div style="color:rgba(255,255,255,0.55); font-size:14px; margin-bottom:28px;">
+                    Открывайте одним касанием, как обычное приложение
+                </div>
+
+                <!-- Три колонки с инструкцией -->
+                <div id="pwa-instructions" style="display:flex; flex-wrap:wrap; justify-content:center; gap:16px; max-width:720px; margin:0 auto 24px;">
+
+                    <!-- iPhone / iPad -->
+                    <div style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:20px 24px; min-width:200px; flex:1; text-align:left;">
+                        <div style="font-size:22px; margin-bottom:8px;">🍎</div>
+                        <div style="color:#fff; font-size:14px; font-weight:600; margin-bottom:10px;">iPhone / iPad</div>
+                        <div style="color:rgba(255,255,255,0.7); font-size:13px; line-height:1.7;">
+                            1. Нажмите
+                            <svg style="display:inline;vertical-align:middle;margin:0 2px;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                            <strong style="color:#fff;">Поделиться</strong><br>
+                            2. Выберите <strong style="color:#fff;">«На экран Домой»</strong><br>
+                            3. Нажмите <strong style="color:#fff;">Добавить</strong>
+                        </div>
+                    </div>
+
+                    <!-- Android -->
+                    <div style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:20px 24px; min-width:200px; flex:1; text-align:left;">
+                        <div style="font-size:22px; margin-bottom:8px;">🤖</div>
+                        <div style="color:#fff; font-size:14px; font-weight:600; margin-bottom:10px;">Android</div>
+                        <div style="color:rgba(255,255,255,0.7); font-size:13px; line-height:1.7;">
+                            1. Нажмите <strong style="color:#fff;">⋮</strong> меню браузера<br>
+                            2. Выберите <strong style="color:#fff;">«Добавить на гл. экран»</strong><br>
+                            3. Нажмите <strong style="color:#fff;">Добавить</strong>
+                        </div>
+                    </div>
+
+                    <!-- ПК -->
+                    <div style="background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:14px; padding:20px 24px; min-width:200px; flex:1; text-align:left;">
+                        <div style="font-size:22px; margin-bottom:8px;">💻</div>
+                        <div style="color:#fff; font-size:14px; font-weight:600; margin-bottom:10px;">Chrome / Edge на ПК</div>
+                        <div style="color:rgba(255,255,255,0.7); font-size:13px; line-height:1.7;">
+                            1. Нажмите <strong style="color:#fff;">⋮</strong> меню браузера<br>
+                            2. Выберите <strong style="color:#fff;">«Установить Фотоальбом»</strong><br>
+                            3. Нажмите <strong style="color:#fff;">Установить</strong>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Кнопка скрыть -->
+                <button onclick="document.getElementById('pwa-install-bar').style.display='none'; localStorage.setItem('pwa_dismissed','1');"
+                    style="background:none; border:none; color:rgba(255,255,255,0.35); font-size:13px; cursor:pointer; padding:4px 12px;">
+                    Скрыть
+                </button>
+
             </div>
         </div>
     </div>
@@ -239,7 +274,7 @@
         <div class="fullscreen-viewer__wrapper">
             <button class="fullscreen-viewer__nav fullscreen-viewer__prev" onclick="gallery.prevPhoto()">‹</button>
             <div class="fullscreen-viewer__image-container">
-    <img id="fv-main-img" src="" alt="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
+    <!-- fv-img-a и fv-img-b создаются динамически в gallery.openFullscreen() -->
 </div>
             <button class="fullscreen-viewer__nav fullscreen-viewer__next" onclick="gallery.nextPhoto()">›</button>
         </div>
@@ -254,71 +289,19 @@
 
     <!-- PWA скрипт -->
     <script>
-    var pwa = {
-        _deferredPrompt: null,
+    document.addEventListener('DOMContentLoaded', function() {
+        var bar = document.getElementById('pwa-install-bar');
+        if (!bar) return;
 
-        init: function() {
-            var self = this;
-            var bar = document.getElementById('pwa-install-bar');
-            var btn = document.getElementById('pwa-install-btn');
-            var safariHint = document.getElementById('pwa-safari-hint');
+        // Скрываем если: уже установлено, администратор, или гость нажал "Скрыть"
+        var isInstalled = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+        var isDismissed = localStorage.getItem('pwa_dismissed') === '1';
+        var isAdmin = !!localStorage.getItem('admin_token');
 
-            // Не показываем если уже установлено как приложение
-            if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
-
-            // Не показываем администратору
-            if (localStorage.getItem('admin_token')) return;
-
-            var isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
-            var isSafari = isIos && /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-
-            if (isSafari) {
-                // iPhone Safari — показываем подсказку сразу
-                if (bar) bar.style.display = 'block';
-                if (safariHint) safariHint.style.display = 'block';
-                if (btn) btn.style.display = 'none';
-            } else {
-                // Chrome / Android / Edge / ПК
-                // Сначала ждём событие браузера — оно даёт нам право показать кнопку установки
-                window.addEventListener('beforeinstallprompt', function(e) {
-                    e.preventDefault();
-                    self._deferredPrompt = e;
-                    if (bar) bar.style.display = 'block';
-                    if (btn) btn.style.display = 'inline-flex';
-                    if (safariHint) safariHint.style.display = 'none';
-                });
-
-                // Если событие не пришло за 3 сек — показываем универсальную подсказку
-                setTimeout(function() {
-                    if (!self._deferredPrompt && bar && bar.style.display === 'none') {
-                        bar.style.display = 'block';
-                        if (safariHint) {
-                            safariHint.style.display = 'block';
-                            safariHint.innerHTML = 'Откройте меню браузера и выберите<br><strong>«Установить приложение»</strong> или <strong>«Добавить на главный экран»</strong>';
-                        }
-                    }
-                }, 3000);
-            }
-
-            // Скрываем после успешной установки
-            window.addEventListener('appinstalled', function() {
-                if (bar) bar.style.display = 'none';
-                self._deferredPrompt = null;
-            });
-        },
-
-        install: function() {
-            if (!this._deferredPrompt) return;
-            this._deferredPrompt.prompt();
-            this._deferredPrompt.userChoice.then(function() {
-                var bar = document.getElementById('pwa-install-bar');
-                if (bar) bar.style.display = 'none';
-            });
-            this._deferredPrompt = null;
+        if (isInstalled || isDismissed || isAdmin) {
+            bar.style.display = 'none';
         }
-    };
-
-    document.addEventListener('DOMContentLoaded', function() { pwa.init(); });
+    });
     </script>
 
     <!-- Скрипты -->

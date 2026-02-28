@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="css/custom.css" type="text/css" media="all" />
 
     <!-- SortableJS для перетаскивания папок -->
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
@@ -138,10 +138,7 @@
                         Выбрать фото
                     </button>
                     <button class="admin-btn" id="btn-enable-sections" onclick="admin.enableSectionMode()" style="width:100%;margin-bottom:10px;">
-                        📂 Режим секций
-                    </button>
-                    <button class="admin-btn" id="btn-exit-sections" onclick="admin.exitSectionMode()" style="width:100%;margin-bottom:10px;display:none;">
-                        ✕ Выйти из секций
+                        📂 Разбить на секции
                     </button>
                     <button class="admin-btn" id="btn-add-section" onclick="admin.addSection()" style="width:100%;margin-bottom:10px;display:none;">
                         + Добавить секцию
@@ -191,20 +188,34 @@
     </div>
 
     <!-- ПОЛНОЭКРАННЫЙ ПРОСМОТР ФОТО -->
-    <!-- Кнопки "Обложка" и "Удалить" создаются динамически в gallery.js — только для админа -->
     <div id="fullscreen-viewer" class="fullscreen-viewer" style="display:none;">
         <div class="fullscreen-viewer__overlay" onclick="gallery.closeFullscreen()"></div>
 
-        <!-- Панель кнопок — заполняется через JS в зависимости от роли -->
+        <!-- Кнопки в правом верхнем углу -->
         <div class="fullscreen-viewer__actions" id="fullscreen-actions">
-            <!-- Содержимое создаётся динамически в gallery.openFullscreen() -->
+            <button class="fv-action-btn fv-action-btn--admin-only" id="btn-set-cover" onclick="admin.setFolderCover()" title="Превью папки">
+                <i data-lucide="image"></i>
+                <span>Обложка</span>
+            </button>
+            <a id="download-link" class="fv-action-btn" href="" download title="Скачать оригинал">
+                <i data-lucide="download"></i>
+                <span>Скачать</span>
+            </a>
+            <button class="fv-action-btn fv-action-btn--danger fv-action-btn--admin-only" id="btn-delete-photo" onclick="admin.deleteCurrentPhoto()" title="Удалить">
+                <i data-lucide="trash-2"></i>
+                <span>Удалить</span>
+            </button>
+            <button class="fv-action-btn" onclick="gallery.closeFullscreen()" title="Закрыть">
+                <i data-lucide="x"></i>
+                <span>Закрыть</span>
+            </button>
         </div>
 
         <div class="fullscreen-viewer__wrapper">
             <button class="fullscreen-viewer__nav fullscreen-viewer__prev" onclick="gallery.prevPhoto()">‹</button>
             <div class="fullscreen-viewer__image-container">
-    <img id="fv-main-img" src="" alt="" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;pointer-events:none;">
-</div>
+                <!-- img элементы создаются динамически в gallery.js -->
+            </div>
             <button class="fullscreen-viewer__nav fullscreen-viewer__next" onclick="gallery.nextPhoto()">›</button>
         </div>
     </div>
@@ -218,7 +229,7 @@
 
     <!-- Скрипты -->
     <script src="js/api.js?v=3"></script>
-    <script src="js/gallery.js?v=4"></script>
-    <script src="js/admin.js?v=4"></script>
+    <script src="js/gallery.js?v=3"></script>
+    <script src="js/admin.js?v=3"></script>
 </body>
 </html>

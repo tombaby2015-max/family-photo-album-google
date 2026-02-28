@@ -64,20 +64,9 @@ export default {
       try {
         const accessToken = await getGoogleAccessToken(env);
 
-        // Для оригинала — сначала получаем имя файла из Drive metadata
-        let originalFileName = "photo.jpg";
-        if (size === "original") {
-          try {
-            const metaResp = await fetch(
-              `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name`,
-              { headers: { Authorization: `Bearer ${accessToken}` } }
-            );
-            if (metaResp.ok) {
-              const meta = await metaResp.json();
-              originalFileName = meta.name || "photo.jpg";
-            }
-          } catch(e) {}
-        }
+        // Имя файла берём из параметра URL (передаётся из gallery.js)
+        // Не делаем отдельный запрос к Drive API за metadata
+        const photoName = url.searchParams.get("name") || "photo.jpg";
 
         const resp = await fetch(
           `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
@@ -100,8 +89,8 @@ export default {
           // Формируем имя: "Название папки — IMG_2045.jpg"
           const decodedFolder = folderName ? decodeURIComponent(folderName) : "";
           const downloadName = decodedFolder
-            ? `${decodedFolder} — ${originalFileName}`
-            : originalFileName;
+            ? `${decodedFolder} — ${photoName}`
+            : photoName;
           // encodeURIComponent для поддержки кириллицы в имени файла
           headers["Content-Disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
         }

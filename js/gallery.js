@@ -810,34 +810,46 @@ var gallery = {
         var nextSlot = (currSlot + 1) % 3;
 
         // direction: 'left' — вперёд, 'right' — назад
-        var enterFrom = direction === 'left' ? 100 : -100;
         var exitTo    = direction === 'left' ? -100 : 100;
+        var enterFrom = direction === 'left' ?  100 : -100;
 
-        // Готовим новый слот: убираем без анимации на стартовую позицию
-        imgs[nextSlot].src = self.visiblePhotos[newIndex].thumbUrl || '';
-        self._fvSetPos(imgs[nextSlot], enterFrom, false);
-
-        // Следующий кадр — запускаем анимацию
+        // Фаза 1: текущее фото уезжает и затемняется
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
-                // Текущий уезжает
-                self._fvSetPos(imgs[currSlot], exitTo, true);
-                // Новый въезжает в центр
-                self._fvSetPos(imgs[nextSlot], 0, true);
+                imgs[currSlot].style.transition = 'transform 0.28s cubic-bezier(.4,0,.2,1), opacity 0.28s ease';
+                imgs[currSlot].style.transform  = 'translateX(' + exitTo + '%)';
+                imgs[currSlot].style.opacity    = '0';
 
+                // Фаза 2: после паузы — новое фото въезжает из-за края
                 setTimeout(function() {
-                    // Активный слот теперь nextSlot
-                    self._fvSlot = nextSlot;
-                    self.currentPhotoIndex = newIndex;
-
-                    // Убираем старый слот за экран (без анимации)
-                    self._fvSetPos(imgs[currSlot], 100, false);
+                    // Прячем старое
+                    imgs[currSlot].style.transition = 'none';
+                    imgs[currSlot].style.transform  = 'translateX(100%)';
+                    imgs[currSlot].style.opacity    = '1';
                     imgs[currSlot].src = '';
 
-                    self._updateActionsPanel(self.visiblePhotos[newIndex]);
-                    if (typeof lucide !== 'undefined') lucide.createIcons();
-                    self._animating = false;
-                }, 350);
+                    // Ставим новое за краем (без анимации)
+                    imgs[nextSlot].src = self.visiblePhotos[newIndex].thumbUrl || '';
+                    imgs[nextSlot].style.transition = 'none';
+                    imgs[nextSlot].style.transform  = 'translateX(' + enterFrom + '%)';
+                    imgs[nextSlot].style.opacity    = '1';
+
+                    // Въезд нового фото
+                    requestAnimationFrame(function() {
+                        requestAnimationFrame(function() {
+                            imgs[nextSlot].style.transition = 'transform 0.28s cubic-bezier(.4,0,.2,1)';
+                            imgs[nextSlot].style.transform  = 'translateX(0)';
+
+                            setTimeout(function() {
+                                self._fvSlot = nextSlot;
+                                self.currentPhotoIndex = newIndex;
+                                self._updateActionsPanel(self.visiblePhotos[newIndex]);
+                                if (typeof lucide !== 'undefined') lucide.createIcons();
+                                self._animating = false;
+                            }, 300);
+                        });
+                    });
+                }, 300); // пауза между фазами — тёмный экран
             });
         });
     },

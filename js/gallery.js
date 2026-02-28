@@ -810,46 +810,46 @@ var gallery = {
         var nextSlot = (currSlot + 1) % 3;
 
         // direction: 'left' — вперёд, 'right' — назад
-        var exitTo    = direction === 'left' ? -100 : 100;
-        var enterFrom = direction === 'left' ?  100 : -100;
+        // Старое уезжает на ±60%, новое стартует с ±160% —
+        // итого между ними всегда зазор ~100% (ширина контейнера).
+        // Они движутся параллельно, но никогда не соприкасаются.
+        var exitTo    = direction === 'left' ? -60  :  60;
+        var enterFrom = direction === 'left' ? 160  : -160;
+        var DURATION  = 480; // мс — одна длительность для обоих
 
-        // Фаза 1: текущее фото уезжает и затемняется
+        // Ставим новое фото за краем без анимации
+        imgs[nextSlot].src = self.visiblePhotos[newIndex].thumbUrl || '';
+        imgs[nextSlot].style.transition = 'none';
+        imgs[nextSlot].style.transform  = 'translateX(' + enterFrom + '%)';
+        imgs[nextSlot].style.opacity    = '0';
+
         requestAnimationFrame(function() {
             requestAnimationFrame(function() {
-                imgs[currSlot].style.transition = 'transform 0.28s cubic-bezier(.4,0,.2,1), opacity 0.28s ease';
+                var timing = 'transform ' + DURATION + 'ms cubic-bezier(.4,0,.2,1), opacity ' + DURATION + 'ms ease';
+
+                // Старое: едет в сторону + затемняется
+                imgs[currSlot].style.transition = timing;
                 imgs[currSlot].style.transform  = 'translateX(' + exitTo + '%)';
                 imgs[currSlot].style.opacity    = '0';
 
-                // Фаза 2: после паузы — новое фото въезжает из-за края
+                // Новое: одновременно едет к центру + появляется
+                imgs[nextSlot].style.transition = timing;
+                imgs[nextSlot].style.transform  = 'translateX(0)';
+                imgs[nextSlot].style.opacity    = '1';
+
                 setTimeout(function() {
-                    // Прячем старое
+                    // Убираем старый слот
                     imgs[currSlot].style.transition = 'none';
                     imgs[currSlot].style.transform  = 'translateX(100%)';
                     imgs[currSlot].style.opacity    = '1';
                     imgs[currSlot].src = '';
 
-                    // Ставим новое за краем (без анимации)
-                    imgs[nextSlot].src = self.visiblePhotos[newIndex].thumbUrl || '';
-                    imgs[nextSlot].style.transition = 'none';
-                    imgs[nextSlot].style.transform  = 'translateX(' + enterFrom + '%)';
-                    imgs[nextSlot].style.opacity    = '1';
-
-                    // Въезд нового фото
-                    requestAnimationFrame(function() {
-                        requestAnimationFrame(function() {
-                            imgs[nextSlot].style.transition = 'transform 0.28s cubic-bezier(.4,0,.2,1)';
-                            imgs[nextSlot].style.transform  = 'translateX(0)';
-
-                            setTimeout(function() {
-                                self._fvSlot = nextSlot;
-                                self.currentPhotoIndex = newIndex;
-                                self._updateActionsPanel(self.visiblePhotos[newIndex]);
-                                if (typeof lucide !== 'undefined') lucide.createIcons();
-                                self._animating = false;
-                            }, 300);
-                        });
-                    });
-                }, 300); // пауза между фазами — тёмный экран
+                    self._fvSlot = nextSlot;
+                    self.currentPhotoIndex = newIndex;
+                    self._updateActionsPanel(self.visiblePhotos[newIndex]);
+                    if (typeof lucide !== 'undefined') lucide.createIcons();
+                    self._animating = false;
+                }, DURATION + 20);
             });
         });
     },

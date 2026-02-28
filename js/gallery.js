@@ -765,12 +765,11 @@ var gallery = {
         if (!document.getElementById('fv-tap-prev')) {
             var tapPrev = document.createElement('div');
             tapPrev.id = 'fv-tap-prev';
-            tapPrev.style.cssText = 'position:absolute;left:0;top:0;width:25%;height:100%;z-index:3;cursor:pointer;display:none;';
-            tapPrev.onclick = function() { gallery.prevPhoto(); };
+            // -webkit-tap-highlight-color убирает вспышку при нажатии на iOS/Android
+            tapPrev.style.cssText = 'position:absolute;left:0;top:0;width:25%;height:100%;z-index:3;cursor:pointer;display:none;-webkit-tap-highlight-color:transparent;user-select:none;';
             var tapNext = document.createElement('div');
             tapNext.id = 'fv-tap-next';
-            tapNext.style.cssText = 'position:absolute;right:0;top:0;width:25%;height:100%;z-index:3;cursor:pointer;display:none;';
-            tapNext.onclick = function() { gallery.nextPhoto(); };
+            tapNext.style.cssText = 'position:absolute;right:0;top:0;width:25%;height:100%;z-index:3;cursor:pointer;display:none;-webkit-tap-highlight-color:transparent;user-select:none;';
             var wrapper = document.querySelector('.fullscreen-viewer__wrapper');
             if (wrapper) {
                 wrapper.appendChild(tapPrev);
@@ -815,7 +814,7 @@ var gallery = {
         // Они движутся параллельно, но никогда не соприкасаются.
         var exitTo    = direction === 'left' ? -60  :  60;
         var enterFrom = direction === 'left' ? 160  : -160;
-        var DURATION  = 480; // мс — одна длительность для обоих
+        var DURATION  = 280; // мс — одна длительность для обоих
 
         // Ставим новое фото за краем без анимации
         imgs[nextSlot].src = self.visiblePhotos[newIndex].thumbUrl || '';
@@ -893,25 +892,40 @@ var gallery = {
         var viewer = document.getElementById('fullscreen-viewer');
         if (!viewer) return;
 
-        var startX = 0, startY = 0, tracking = false;
+        var startX = 0, startY = 0, startTime = 0;
 
         viewer.addEventListener('touchstart', function(e) {
             if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
-            // Исключаем tap-зоны — они обрабатываются через onclick
-            if (e.target.id === 'fv-tap-prev' || e.target.id === 'fv-tap-next') return;
-            tracking = true;
             startX = e.touches[0].clientX;
             startY = e.touches[0].clientY;
+            startTime = Date.now();
         }, { passive: true });
 
         viewer.addEventListener('touchend', function(e) {
-            if (!tracking) return;
-            tracking = false;
+            if (e.target.closest('.fullscreen-viewer__actions') || e.target.closest('.fullscreen-viewer__nav')) return;
+
             var dx = e.changedTouches[0].clientX - startX;
             var dy = e.changedTouches[0].clientY - startY;
-            // Горизонтальный свайп должен явно преобладать
-            if (Math.abs(dy) > Math.abs(dx) * 0.8) return;
-            if (Math.abs(dx) < 50) return;
+            var dt = Date.now() - startTime;
+            var absDx = Math.abs(dx);
+            var absDy = Math.abs(dy);
+
+            // Короткий тап (без существенного движения) — на краевых зонах
+            if (absDx < 15 && absDy < 15 && dt < 300) {
+                var tapP = document.getElementById('fv-tap-prev');
+                var tapN = document.getElementById('fv-tap-next');
+                if (tapP && tapP.style.display !== 'none') {
+                    var vw = viewer.offsetWidth;
+                    var zone = vw * 0.25;
+                    if (startX < zone) { self.prevPhoto(); return; }
+                    if (startX > vw - zone) { self.nextPhoto(); return; }
+                }
+                return;
+            }
+
+            // Свайп — горизонталь должна явно преобладать над вертикалью
+            if (absDy > absDx * 0.8) return;
+            if (absDx < 40) return;
             if (dx < 0) self._goToPhoto(self.currentPhotoIndex + 1, 'left');
             else self._goToPhoto(self.currentPhotoIndex - 1, 'right');
         }, { passive: true });

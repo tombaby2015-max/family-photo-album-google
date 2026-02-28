@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Фотоальбом</title>
-    <meta property="og:title" content="Фотоальбом" />
+    <title>Семейный фотоальбом</title>
+    <meta property="og:title" content="Семейный фотоальбом" />
     <meta property="og:description" content="Семейный фотоархив" />
     <meta name="format-detection" content="telephone=no" />
 
@@ -22,7 +22,7 @@
     <meta name="theme-color" content="#000000">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Фотоальбом">
+    <meta name="apple-mobile-web-app-title" content="Семейный фотоальбом">
     <link rel="apple-touch-icon" href="icons/icon-192.png">
 
     <!-- Наши стили -->
@@ -59,6 +59,19 @@
             height: 18px;
             flex-shrink: 0;
         }
+
+        /* Фикс высоты обложки в PWA (установленное приложение) —
+           100vh в standalone-режиме не учитывает системную строку статуса.
+           dvh = dynamic viewport height, корректно работает в PWA. */
+        @media all and (display-mode: standalone) {
+            .t-cover,
+            .t-cover__carrier,
+            .t-cover__filter,
+            .t-cover__wrapper {
+                height: 100dvh !important;
+                min-height: 100dvh !important;
+            }
+        }
     </style>
 
     <!-- SortableJS для перетаскивания папок -->
@@ -93,7 +106,7 @@
                     <div class="t-cover__wrapper t-valign_middle" style="height:100vh;">
                         <div class="t001 t-align_center">
                             <div class="t001__wrapper" data-hook-content="covercontent">
-                                <div class="t001__title t-title t-title_xl" style="text-transform:uppercase;"><strong>ФОТОАЛЬБОМ</strong></div>
+                                <div class="t001__title t-title t-title_xl" style="text-transform:uppercase;"><strong>СЕМЕЙНЫЙ ФОТОАЛЬБОМ</strong></div>
                             </div>
                         </div>
                     </div>
@@ -250,7 +263,7 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2v13M7 11l5 5 5-5"/><path d="M3 18h18v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2z"/>
         </svg>
-        Установить приложение
+        Установить фотоальбом как приложение
     </button>
 
     <!-- ФУТЕР -->

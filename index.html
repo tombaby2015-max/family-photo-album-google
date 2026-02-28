@@ -60,17 +60,79 @@
             flex-shrink: 0;
         }
 
-        /* Фикс высоты обложки в PWA (установленное приложение) —
-           100vh в standalone-режиме не учитывает системную строку статуса.
-           dvh = dynamic viewport height, корректно работает в PWA. */
-        @media all and (display-mode: standalone) {
-            .t-cover,
-            .t-cover__carrier,
-            .t-cover__filter,
-            .t-cover__wrapper {
-                height: 100dvh !important;
-                min-height: 100dvh !important;
-            }
+        /* Фикс высоты обложки на мобильных (браузер и PWA).
+           dvh = dynamic viewport height — убирает прыжок от адресной строки.
+           Фолбэк 100vh для старых браузеров без поддержки dvh. */
+        .t-cover,
+        .t-cover__carrier,
+        .t-cover__filter,
+        .t-cover__wrapper {
+            height: 100dvh !important;
+            min-height: 100dvh !important;
+        }
+        /* Дополнительно фиксируем inline-стили которые Tilda прописывает через JS */
+        #recorddiv-cover {
+            height: 100dvh !important;
+        }
+
+        /* Кнопка "Вверх" */
+        #scroll-to-top {
+            display: none;
+            position: fixed;
+            bottom: 80px;
+            right: 24px;
+            z-index: 9998;
+            background: rgba(0,0,0,0.75);
+            color: #ffffff;
+            border: none;
+            border-radius: 50px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-family: inherit;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+            align-items: center;
+            gap: 6px;
+            transition: opacity 0.3s, transform 0.2s;
+            backdrop-filter: blur(4px);
+        }
+        #scroll-to-top:hover {
+            transform: translateY(-2px);
+        }
+        #scroll-to-top svg {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        /* Разделитель внутри папки */
+        .folder-divider {
+            padding: 40px 0;
+        }
+        .folder-divider__inner {
+            max-width: 640px;
+            margin: 0 auto;
+            position: relative;
+            opacity: 0.2;
+        }
+        .folder-divider__line {
+            height: 1px;
+            background: #000000;
+        }
+        .folder-divider__fade-left {
+            position: absolute;
+            top: 0; left: 0;
+            width: 40%;
+            height: 1px;
+            background-image: linear-gradient(to left, #000000, rgba(0,0,0,0));
+        }
+        .folder-divider__fade-right {
+            position: absolute;
+            top: 0; right: 0;
+            width: 40%;
+            height: 1px;
+            background-image: linear-gradient(to right, #000000, rgba(0,0,0,0));
         }
     </style>
 
@@ -215,6 +277,15 @@
             <div id="photos-container">
                 <div class="loading">Загрузка фото...</div>
             </div>
+
+            <!-- Разделитель в конце папки -->
+            <div class="folder-divider" id="folder-bottom-divider">
+                <div class="folder-divider__inner">
+                    <div class="folder-divider__fade-left"></div>
+                    <div class="folder-divider__line"></div>
+                    <div class="folder-divider__fade-right"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -266,6 +337,14 @@
         Установить фотоальбом как приложение
     </button>
 
+    <!-- КНОПКА ВВЕРХ -->
+    <button id="scroll-to-top" onclick="scrollToTop()">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+        </svg>
+        Вверх
+    </button>
+
     <!-- ФУТЕР -->
     <div id="main-footer" class="t-tildalabel t-tildalabel-free">
         <div class="t-tildalabel-free__main">
@@ -284,13 +363,12 @@
 
         // Перехватываем браузерный автобаннер — показываем ТОЛЬКО нашу кнопку
         window.addEventListener('beforeinstallprompt', function(e) {
-            e.preventDefault(); // убирает автоматический системный баннер
+            e.preventDefault();
             _pwaPrompt = e;
             var btn = document.getElementById('pwa-install-btn');
             if (btn) btn.style.display = 'flex';
         });
 
-        // Клик по нашей кнопке → показываем диалог установки
         function pwaInstall() {
             if (!_pwaPrompt) return;
             _pwaPrompt.prompt();
@@ -301,12 +379,36 @@
             });
         }
 
-        // Если уже установлено — скрываем кнопку
         window.addEventListener('appinstalled', function() {
             var btn = document.getElementById('pwa-install-btn');
             if (btn) btn.style.display = 'none';
             _pwaPrompt = null;
         });
+
+        // Кнопка "Вверх" — показывается после 300px скролла
+        (function() {
+            var btn = document.getElementById('scroll-to-top');
+            var THRESHOLD = 300;
+
+            window.addEventListener('scroll', function() {
+                if (!btn) return;
+                if (window.scrollY > THRESHOLD) {
+                    btn.style.display = 'flex';
+                } else {
+                    btn.style.display = 'none';
+                }
+            }, { passive: true });
+        })();
+
+        function scrollToTop() {
+            // Прокрутка к кнопке "Назад к папкам" — верх страницы папки
+            var target = document.getElementById('folder-page');
+            if (target && target.style.display !== 'none') {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        }
     </script>
 </body>
 </html>

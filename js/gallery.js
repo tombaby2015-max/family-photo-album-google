@@ -10,7 +10,10 @@
 // Настройки кеша
 var CACHE_KEY_FOLDERS = 'photo_cache_folders';
 var CACHE_TTL = 30 * 60 * 1000; // 30 минут в миллисекундах
-var CACHE_KEY_LOADED_FOLDERS = 'photo_loaded_folders'; // папки у которых кэш уже был загружен
+// Версия должна совпадать с CACHE_NAME в sw.js
+// При смене версии кэша SW — старые метки загрузки автоматически игнорируются
+var THUMB_CACHE_VERSION = 'v4';
+var CACHE_KEY_LOADED_FOLDERS = 'photo_loaded_folders_' + THUMB_CACHE_VERSION;
 
 // ==========================================
 // SERVICE WORKER — регистрация

@@ -171,9 +171,23 @@
     background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
     color: #fff;
     padding: 50px 15px 15px;
+}
+/* Название папки — основная строка */
+.folder-card__title-name {
+    display: block;
     font-size: 21px;
     font-weight: 600;
+    line-height: 1.3;
 }
+/* Счётчик фото — отдельная строка под названием */
+.folder-card__title-count {
+    display: block;
+    font-size: 13px;
+    font-weight: 400;
+    opacity: 0.8;
+    margin-top: 4px;
+}
+/* Оставляем span для обратной совместимости */
 .folder-card__title span {
     font-size: 16px;
     font-weight: 400;
@@ -602,8 +616,6 @@
     border-radius: 4px;
     transition: opacity 0.2s ease;
 }
-
-/* Перелистывание через fv-strip (три слоя: prev/curr/next) — логика в gallery.js */
 
 .fullscreen-viewer__close {
     display: none;

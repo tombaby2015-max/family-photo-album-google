@@ -226,8 +226,10 @@ var gallery = {
         container.innerHTML = html;
 
         // Показываем баннер для страницы папок (folderId=null)
+        // Считаем только папки у которых есть обложка
+        var foldersWithCover = self.folders.filter(function(f) { return !!f.cover_url; });
         self._showFirstLoadBannerIfNeeded(null);
-        self._trackImagesLoading(null, self.folders.length);
+        self._trackFolderCovers(foldersWithCover);
 
         for (var k = 0; k < self.folders.length; k++) {
             self.loadFolderCover(self.folders[k]);
@@ -434,10 +436,44 @@ var gallery = {
         this._markFolderLoaded(folderId);
     },
 
+    // Трекер для обложек папок (background-image — onload не работает, используем Image())
+    _trackFolderCovers: function(folders) {
+        var self = this;
+        if (!this._isFirstLoad(null)) return;
+        var total = folders.length;
+        if (total === 0) { self._hideFirstLoadBanner(null); return; }
+
+        var loaded = 0;
+        var counter = document.getElementById('banner-counter-text');
+        var sub = document.getElementById('banner-sub-text');
+        if (counter) counter.textContent = '0 / ' + total;
+        if (sub) sub.textContent = 'обложек загружено';
+
+        function onOne() {
+            loaded++;
+            if (counter) counter.textContent = loaded + ' / ' + total;
+            if (loaded >= total) {
+                setTimeout(function() { self._hideFirstLoadBanner(null); }, 800);
+            }
+        }
+
+        folders.forEach(function(folder) {
+            var url = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
+            var img = new Image();
+            img.onload  = onOne;
+            img.onerror = onOne;
+            img.src = url;
+        });
+
+        // Страховка 60 сек
+        setTimeout(function() { self._hideFirstLoadBanner(null); }, 60000);
+    },
+
     // Запускает отслеживание загрузки img и обновляет счётчик
     _trackImagesLoading: function(folderId, total) {
         var self = this;
         if (!this._isFirstLoad(folderId)) return;
+        if (total === 0) { self._hideFirstLoadBanner(folderId); return; }
 
         var loaded = 0;
         var counter = document.getElementById('banner-counter-text');
@@ -446,31 +482,34 @@ var gallery = {
         if (counter) counter.textContent = '0 / ' + total;
         if (sub) sub.textContent = 'фото загружено';
 
-        // Наблюдаем за всеми img в photos-container и folders-container
         var containerId = folderId ? 'photos-container' : 'folders-container';
+        var container = document.getElementById(containerId);
+        if (!container) { self._hideFirstLoadBanner(folderId); return; }
+
+        var observed = new Set();
+        var observer = null;
 
         function checkDone() {
             loaded++;
             if (counter) counter.textContent = loaded + ' / ' + total;
             if (loaded >= total) {
-                // Небольшая пауза чтобы последнее фото успело отрисоваться
+                if (observer) observer.disconnect();
                 setTimeout(function() {
                     self._hideFirstLoadBanner(folderId);
-                }, 600);
+                }, 800);
             }
         }
 
-        // Подписываемся на load/error каждого img
-        // Используем MutationObserver чтобы ловить img которые добавляются порциями
-        var container = document.getElementById(containerId);
-        if (!container) { self._hideFirstLoadBanner(folderId); return; }
-
-        var observed = new Set();
-
         function attachToImg(img) {
             if (observed.has(img)) return;
+            // Пропускаем img без src (обложки папок могут грузиться отдельно)
+            if (!img.src || img.src === window.location.href) return;
             observed.add(img);
-            if (img.complete) {
+            if (img.complete && img.naturalWidth > 0) {
+                // Уже загружено (из кэша браузера)
+                checkDone();
+            } else if (img.complete && img.naturalWidth === 0) {
+                // Ошибка загрузки — тоже считаем
                 checkDone();
             } else {
                 img.addEventListener('load',  checkDone, { once: true });
@@ -478,26 +517,29 @@ var gallery = {
             }
         }
 
-        // Вешаем на уже существующие img
-        var existing = container.querySelectorAll('img[src]');
-        existing.forEach(attachToImg);
-
-        // MutationObserver для порционно добавляемых img
-        var observer = new MutationObserver(function(mutations) {
+        // MutationObserver — ловим img которые появятся после рендера
+        observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(m) {
                 m.addedNodes.forEach(function(node) {
                     if (node.nodeType !== 1) return;
                     if (node.tagName === 'IMG') attachToImg(node);
-                    node.querySelectorAll && node.querySelectorAll('img[src]').forEach(attachToImg);
+                    if (node.querySelectorAll) {
+                        node.querySelectorAll('img').forEach(attachToImg);
+                    }
                 });
+                // Ловим изменение src у существующих img (обложки папок)
+                if (m.type === 'attributes' && m.target.tagName === 'IMG') {
+                    attachToImg(m.target);
+                }
             });
-            // Если все уже отслежены — проверяем
-            if (observed.size >= total) observer.disconnect();
         });
-        observer.observe(container, { childList: true, subtree: true });
+        observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });
 
-        // Страховка: если через 30 сек ещё не закрылся — закрываем
-        setTimeout(function() { self._hideFirstLoadBanner(folderId); }, 30000);
+        // Вешаем на уже существующие img (на случай если рендер уже прошёл)
+        container.querySelectorAll('img').forEach(attachToImg);
+
+        // Страховка: если через 60 сек не закрылся — закрываем принудительно
+        setTimeout(function() { self._hideFirstLoadBanner(folderId); }, 60000);
     },
 
     // === ОТКРЫТИЕ ПАПКИ ===
@@ -873,7 +915,7 @@ var gallery = {
         }
 
         return '<div class="photo-item ' + hiddenClass + '" data-id="' + photo.id + '" data-hidden="' + (photo.hidden ? '1' : '0') + '" data-index="' + index + '" onclick="gallery.handlePhotoClick(event, \'' + photo.id + '\')">' +
-            '<img src="' + (photo.thumbUrl || '') + '" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">' +
+            '<img src="' + (photo.thumbUrl || '') + '" alt="" style="width:100%;height:100%;object-fit:cover;">' +
             adminActions +
         '</div>';
     },

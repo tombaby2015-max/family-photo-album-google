@@ -558,6 +558,23 @@ var gallery = {
         self._displayOrder = self.visiblePhotos.map(function(p) { return p.id; });
     },
 
+    // ==========================================
+    // ПЕРЕСБОРКА visiblePhotos ИЗ DOM
+    // Вызывается после drag-and-drop, чтобы порядок листания
+    // совпадал с визуальным порядком фото на экране.
+    // ==========================================
+    _rebuildVisiblePhotosFromDOM: function() {
+        var self = this;
+        var newOrder = [];
+        document.querySelectorAll('.photo-item').forEach(function(el) {
+            var id = el.getAttribute('data-id');
+            var photo = self._photoById(id);
+            if (photo) newOrder.push(photo);
+        });
+        self.visiblePhotos = newOrder;
+        self._buildDisplayOrder();
+    },
+
     _displayIndexById: function(photoId) {
         if (!this._displayOrder) return -1;
         return this._displayOrder.indexOf(photoId);
@@ -566,6 +583,10 @@ var gallery = {
     _photoById: function(photoId) {
         for (var i = 0; i < this.visiblePhotos.length; i++) {
             if (this.visiblePhotos[i].id === photoId) return this.visiblePhotos[i];
+        }
+        // Если не найдено в visiblePhotos, ищем в currentPhotos (на случай перестройки)
+        for (var j = 0; j < this.currentPhotos.length; j++) {
+            if (this.currentPhotos[j].id === photoId) return this.currentPhotos[j];
         }
         return null;
     },

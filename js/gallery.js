@@ -180,14 +180,10 @@ var gallery = {
             });
         } else {
             if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
-            // Показываем баннер если главная ещё ни разу не загружалась
-            self._showFirstLoadBannerIfNeeded('__main__', 'Альбом загружается впервые — подождите, не закрывайте страницу');
             api.getFolders().then(function(folders) {
                 self.folders = folders;
                 self._saveFoldersToCache(folders);
                 self.renderFolders();
-                // Скрываем когда обложки папок загрузятся
-                self._hideFirstLoadBanner('__main__');
             });
         }
     },
@@ -395,83 +391,37 @@ var gallery = {
     },
 
     // === БАННЕР ПЕРВОЙ ЗАГРУЗКИ ===
-    _isFirstLoad: function(key) {
+    _isFirstLoad: function(folderId) {
         try {
             var loaded = JSON.parse(localStorage.getItem(CACHE_KEY_LOADED_FOLDERS) || '{}');
-            return !loaded[key];
+            return !loaded[folderId];
         } catch(e) { return true; }
     },
 
-    _markLoaded: function(key) {
+    _markFolderLoaded: function(folderId) {
         try {
             var loaded = JSON.parse(localStorage.getItem(CACHE_KEY_LOADED_FOLDERS) || '{}');
-            loaded[key] = true;
+            loaded[folderId] = true;
             localStorage.setItem(CACHE_KEY_LOADED_FOLDERS, JSON.stringify(loaded));
         } catch(e) {}
     },
 
-    // Показываем центральный оверлей-баннер
-    _showLoadingOverlay: function(text) {
-        var overlay = document.getElementById('loading-overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'loading-overlay';
-            document.body.appendChild(overlay);
-        }
-        overlay.innerHTML =
-            '<div class="loading-overlay__box">' +
-            '<div class="loading-overlay__icon">&#9203;</div>' +
-            '<div class="loading-overlay__title">Первое открытие</div>' +
-            '<div class="loading-overlay__text">' + text + '</div>' +
-            '<div class="loading-overlay__dots"><span></span><span></span><span></span></div>' +
-            '</div>';
-        overlay.style.display = 'flex';
-    },
-
-    _hideLoadingOverlay: function() {
-        var overlay = document.getElementById('loading-overlay');
-        if (!overlay || overlay.style.display === 'none') return;
-        overlay.classList.add('loading-overlay--hiding');
-        setTimeout(function() {
-            overlay.style.display = 'none';
-            overlay.classList.remove('loading-overlay--hiding');
-        }, 600);
-    },
-
-    _showFirstLoadBannerIfNeeded: function(key, text) {
-        if (this._isFirstLoad(key)) {
-            this._showLoadingOverlay(text || 'Фотографии загружаются впервые —\nподождите, не закрывайте страницу');
+    _showFirstLoadBannerIfNeeded: function(folderId) {
+        var banner = document.getElementById('first-load-banner');
+        if (!banner) return;
+        if (this._isFirstLoad(folderId)) {
+            banner.style.display = 'block';
+            var progress = document.getElementById('banner-progress-text');
+            if (progress) progress.textContent = '';
+        } else {
+            banner.style.display = 'none';
         }
     },
 
-    // Скрываем баннер только когда реально загрузились картинки в браузере
-    _hideFirstLoadBanner: function(key) {
-        var self = this;
-        self._markLoaded(key);
-
-        var imgs = document.querySelectorAll('#photos-container img, #folders-container img');
-        var pending = [];
-        imgs.forEach(function(img) {
-            if (!img.complete) pending.push(img);
-        });
-
-        if (pending.length === 0) {
-            self._hideLoadingOverlay();
-            return;
-        }
-
-        var done = 0;
-        var hide = function() {
-            done++;
-            if (done >= pending.length) self._hideLoadingOverlay();
-        };
-        pending.forEach(function(img) {
-            img.addEventListener('load', hide, { once: true });
-            img.addEventListener('error', hide, { once: true });
-        });
-
-        // Страховка — скрываем не позже чем через 15 секунд
-        setTimeout(function() { self._hideLoadingOverlay(); }, 15000);
+    _hideFirstLoadBanner: function(folderId) {
+        var banner = document.getElementById('first-load-banner');
+        if (banner) banner.style.display = 'none';
+        this._markFolderLoaded(folderId);
     },
 
     // === ОТКРЫТИЕ ПАПКИ ===
@@ -557,28 +507,6 @@ var gallery = {
                     allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName + '&name=' + photoName;
                 }
 
-                // Строим visiblePhotos в том же порядке, в каком они будут показаны на экране:
-                // сначала фото без секции, затем фото каждой секции в порядке секций
-                var ordered = [];
-                var bySection = {};
-                for (var ii = 0; ii < allPhotos.length; ii++) {
-                    var pp = allPhotos[ii];
-                    if (pp.section_id) {
-                        if (!bySection[pp.section_id]) bySection[pp.section_id] = [];
-                        bySection[pp.section_id].push(pp);
-                    } else {
-                        ordered.push(pp);
-                    }
-                }
-                var sections = self.sections || [];
-                for (var si = 0; si < sections.length; si++) {
-                    var sPhotos = bySection[sections[si].id] || [];
-                    for (var sj = 0; sj < sPhotos.length; sj++) {
-                        ordered.push(sPhotos[sj]);
-                    }
-                }
-                self.visiblePhotos = ordered;
-
                 if (container) container.innerHTML = '';
                 self.renderPhotos(0);
                 // Скрываем баннер — фото загружены, запоминаем папку как загруженную
@@ -630,23 +558,6 @@ var gallery = {
         self._displayOrder = self.visiblePhotos.map(function(p) { return p.id; });
     },
 
-    // ==========================================
-    // ПЕРЕСБОРКА visiblePhotos ИЗ DOM
-    // Вызывается после drag-and-drop, чтобы порядок листания
-    // совпадал с визуальным порядком фото на экране.
-    // ==========================================
-    _rebuildVisiblePhotosFromDOM: function() {
-        var self = this;
-        var newOrder = [];
-        document.querySelectorAll('.photo-item').forEach(function(el) {
-            var id = el.getAttribute('data-id');
-            var photo = self._photoById(id);
-            if (photo) newOrder.push(photo);
-        });
-        self.visiblePhotos = newOrder;
-        self._buildDisplayOrder();
-    },
-
     _displayIndexById: function(photoId) {
         if (!this._displayOrder) return -1;
         return this._displayOrder.indexOf(photoId);
@@ -655,10 +566,6 @@ var gallery = {
     _photoById: function(photoId) {
         for (var i = 0; i < this.visiblePhotos.length; i++) {
             if (this.visiblePhotos[i].id === photoId) return this.visiblePhotos[i];
-        }
-        // Если не найдено в visiblePhotos, ищем в currentPhotos (на случай перестройки)
-        for (var j = 0; j < this.currentPhotos.length; j++) {
-            if (this.currentPhotos[j].id === photoId) return this.currentPhotos[j];
         }
         return null;
     },

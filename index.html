@@ -270,12 +270,14 @@
             </div>
         </div>
 
-        <!-- КНОПКА УСТАНОВКИ PWA -->
+    
+
+    <!-- КНОПКА УСТАНОВКИ PWA -->
         <div id="pwa-install-bar">
             <button id="pwa-install-btn" onclick="pwaInstall()">Установить фотоальбом как приложение</button>
         </div>
 
-        <!-- ПАПКИ -->
+    <!-- ПАПКИ -->
         <div id="rec-folders" class="r t-rec t-rec_pt_30" style="padding-top:0px;" data-record-type="147">
             <div class="t214">
                 <ul id="folders-container" class="t214__container t-card__container t-container t-container_flex">
@@ -519,7 +521,6 @@
         })();
 
         function scrollToTop() {
-            // Прокрутка к кнопке "Назад к папкам" — верх страницы папки
             var target = document.getElementById('folder-page');
             if (target && target.style.display !== 'none') {
                 target.scrollIntoView({ behavior: 'smooth', block: 'start' });

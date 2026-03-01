@@ -10,6 +10,7 @@
 // Настройки кеша
 var CACHE_KEY_FOLDERS = 'photo_cache_folders';
 var CACHE_TTL = 30 * 60 * 1000; // 30 минут в миллисекундах
+var CACHE_KEY_LOADED_FOLDERS = 'photo_loaded_folders'; // папки у которых кэш уже был загружен
 
 // ==========================================
 // SERVICE WORKER — регистрация
@@ -389,6 +390,40 @@ var gallery = {
         });
     },
 
+    // === БАННЕР ПЕРВОЙ ЗАГРУЗКИ ===
+    _isFirstLoad: function(folderId) {
+        try {
+            var loaded = JSON.parse(localStorage.getItem(CACHE_KEY_LOADED_FOLDERS) || '{}');
+            return !loaded[folderId];
+        } catch(e) { return true; }
+    },
+
+    _markFolderLoaded: function(folderId) {
+        try {
+            var loaded = JSON.parse(localStorage.getItem(CACHE_KEY_LOADED_FOLDERS) || '{}');
+            loaded[folderId] = true;
+            localStorage.setItem(CACHE_KEY_LOADED_FOLDERS, JSON.stringify(loaded));
+        } catch(e) {}
+    },
+
+    _showFirstLoadBannerIfNeeded: function(folderId) {
+        var banner = document.getElementById('first-load-banner');
+        if (!banner) return;
+        if (this._isFirstLoad(folderId)) {
+            banner.style.display = 'block';
+            var progress = document.getElementById('banner-progress-text');
+            if (progress) progress.textContent = '';
+        } else {
+            banner.style.display = 'none';
+        }
+    },
+
+    _hideFirstLoadBanner: function(folderId) {
+        var banner = document.getElementById('first-load-banner');
+        if (banner) banner.style.display = 'none';
+        this._markFolderLoaded(folderId);
+    },
+
     // === ОТКРЫТИЕ ПАПКИ ===
     openFolder: function(folder, pushState) {
         this._lastFolderId = folder.id;
@@ -447,6 +482,9 @@ var gallery = {
         self.visiblePhotos = [];
         self.sections = [];
 
+        // Показываем баннер если эта папка ещё никогда не загружалась (нет кэша миниатюр)
+        self._showFirstLoadBannerIfNeeded(folderId);
+
         Promise.all([
             api.getPhotosList(folderId),
             api.getSections(folderId)
@@ -471,6 +509,8 @@ var gallery = {
 
                 if (container) container.innerHTML = '';
                 self.renderPhotos(0);
+                // Скрываем баннер — фото загружены, запоминаем папку как загруженную
+                self._hideFirstLoadBanner(folderId);
 
                 if (api.isAdmin() && self.sectionModeActive) {
                     setTimeout(function() {

@@ -180,10 +180,14 @@ var gallery = {
             });
         } else {
             if (container) container.innerHTML = '<li class="loading">Загрузка папок...</li>';
+            // Показываем баннер если главная ещё ни разу не загружалась
+            self._showFirstLoadBannerIfNeeded('__main__', 'Альбом загружается впервые — подождите, не закрывайте страницу');
             api.getFolders().then(function(folders) {
                 self.folders = folders;
                 self._saveFoldersToCache(folders);
                 self.renderFolders();
+                // Скрываем когда обложки папок загрузятся
+                self._hideFirstLoadBanner('__main__');
             });
         }
     },
@@ -391,37 +395,83 @@ var gallery = {
     },
 
     // === БАННЕР ПЕРВОЙ ЗАГРУЗКИ ===
-    _isFirstLoad: function(folderId) {
+    _isFirstLoad: function(key) {
         try {
             var loaded = JSON.parse(localStorage.getItem(CACHE_KEY_LOADED_FOLDERS) || '{}');
-            return !loaded[folderId];
+            return !loaded[key];
         } catch(e) { return true; }
     },
 
-    _markFolderLoaded: function(folderId) {
+    _markLoaded: function(key) {
         try {
             var loaded = JSON.parse(localStorage.getItem(CACHE_KEY_LOADED_FOLDERS) || '{}');
-            loaded[folderId] = true;
+            loaded[key] = true;
             localStorage.setItem(CACHE_KEY_LOADED_FOLDERS, JSON.stringify(loaded));
         } catch(e) {}
     },
 
-    _showFirstLoadBannerIfNeeded: function(folderId) {
-        var banner = document.getElementById('first-load-banner');
-        if (!banner) return;
-        if (this._isFirstLoad(folderId)) {
-            banner.style.display = 'block';
-            var progress = document.getElementById('banner-progress-text');
-            if (progress) progress.textContent = '';
-        } else {
-            banner.style.display = 'none';
+    // Показываем центральный оверлей-баннер
+    _showLoadingOverlay: function(text) {
+        var overlay = document.getElementById('loading-overlay');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'loading-overlay';
+            document.body.appendChild(overlay);
+        }
+        overlay.innerHTML =
+            '<div class="loading-overlay__box">' +
+            '<div class="loading-overlay__icon">&#9203;</div>' +
+            '<div class="loading-overlay__title">Первое открытие</div>' +
+            '<div class="loading-overlay__text">' + text + '</div>' +
+            '<div class="loading-overlay__dots"><span></span><span></span><span></span></div>' +
+            '</div>';
+        overlay.style.display = 'flex';
+    },
+
+    _hideLoadingOverlay: function() {
+        var overlay = document.getElementById('loading-overlay');
+        if (!overlay || overlay.style.display === 'none') return;
+        overlay.classList.add('loading-overlay--hiding');
+        setTimeout(function() {
+            overlay.style.display = 'none';
+            overlay.classList.remove('loading-overlay--hiding');
+        }, 600);
+    },
+
+    _showFirstLoadBannerIfNeeded: function(key, text) {
+        if (this._isFirstLoad(key)) {
+            this._showLoadingOverlay(text || 'Фотографии загружаются впервые —\nподождите, не закрывайте страницу');
         }
     },
 
-    _hideFirstLoadBanner: function(folderId) {
-        var banner = document.getElementById('first-load-banner');
-        if (banner) banner.style.display = 'none';
-        this._markFolderLoaded(folderId);
+    // Скрываем баннер только когда реально загрузились картинки в браузере
+    _hideFirstLoadBanner: function(key) {
+        var self = this;
+        self._markLoaded(key);
+
+        var imgs = document.querySelectorAll('#photos-container img, #folders-container img');
+        var pending = [];
+        imgs.forEach(function(img) {
+            if (!img.complete) pending.push(img);
+        });
+
+        if (pending.length === 0) {
+            self._hideLoadingOverlay();
+            return;
+        }
+
+        var done = 0;
+        var hide = function() {
+            done++;
+            if (done >= pending.length) self._hideLoadingOverlay();
+        };
+        pending.forEach(function(img) {
+            img.addEventListener('load', hide, { once: true });
+            img.addEventListener('error', hide, { once: true });
+        });
+
+        // Страховка — скрываем не позже чем через 15 секунд
+        setTimeout(function() { self._hideLoadingOverlay(); }, 15000);
     },
 
     // === ОТКРЫТИЕ ПАПКИ ===

@@ -306,7 +306,7 @@ var gallery = {
         return '<li id="folder-' + folder.id + '" class="t214__col t-item t-card__col t-col t-col_4 folder-card ' + hiddenClass + (isEditing ? ' editing' : '') + '" data-folder-id="' + folder.id + '">' +
             '<div class="folder-card__image" id="folder-image-' + folder.id + '" style="background-color:#eee;">' +
                 '<div class="folder-card__title">' +
-                    '<div class="folder-card__title-name">' + folder.title + '</div>' +
+                    '<div class="folder-card__title-name">' + folder.title.replace(/\|/g, '<br>') + '</div>' +
                     (photoCount > 0 ? '<div class="folder-card__title-count">(' + photoCount + ' фото)</div>' : '') +
                 '</div>' +
                 adminActions +

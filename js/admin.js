@@ -177,6 +177,8 @@ var admin = {
     renameFolder: function(folderId, currentTitle) {
         var id = folderId || (gallery.currentFolder ? gallery.currentFolder.id : null);
         var title = currentTitle || (gallery.currentFolder ? gallery.currentFolder.title : '');
+        // Восстанавливаем символы, экранированные для HTML-атрибута onclick
+        title = title.replace(/&quot;/g, '"').replace(/&#39;/g, "'");
         if (!id) return;
 
         var newTitle = prompt('Новое название:', title);
@@ -206,7 +208,6 @@ var admin = {
     // === ОБЛОЖКА ПАПКИ ===
     setFolderCover: function() {
         if (!gallery.currentFolder) return;
-        // ИСПРАВЛЕНО: используем visiblePhotos напрямую вместо _displayOrder
         var photo = gallery.visiblePhotos[gallery.currentPhotoIndex];
         if (!photo) return;
 
@@ -281,7 +282,6 @@ var admin = {
 
     deleteCurrentPhoto: function() {
         if (!gallery.currentFolder) return;
-        // ИСПРАВЛЕНО: используем visiblePhotos напрямую вместо _displayOrder
         var photo = gallery.visiblePhotos[gallery.currentPhotoIndex];
         if (!photo) return;
         if (!confirm('Удалить это фото из альбома?')) return;
@@ -429,7 +429,6 @@ var admin = {
                 ghostClass: 'sortable-ghost',
                 dragClass: 'sortable-drag',
                 onStart: function(evt) {
-                    // Если тащим выбранное фото — подсвечиваем все остальные выбранные
                     var draggedId = evt.item.getAttribute('data-id');
                     if (self.isSelectionMode && self.selectedPhotos.indexOf(draggedId) !== -1 && self.selectedPhotos.length > 1) {
                         self.selectedPhotos.forEach(function(pid) {
@@ -441,7 +440,6 @@ var admin = {
                     }
                 },
                 onEnd: function(evt) {
-                    // Убираем подсветку
                     document.querySelectorAll('.drag-along').forEach(function(el) {
                         el.classList.remove('drag-along');
                     });
@@ -453,8 +451,6 @@ var admin = {
                     var folderId = gallery.currentFolder ? gallery.currentFolder.id : null;
                     if (!folderId || !draggedId) return;
 
-                    // Определяем какие фото перемещаем:
-                    // если режим выбора и перетаскиваем одно из выбранных — перемещаем все выбранные
                     var photosToMove = [];
                     if (self.isSelectionMode && self.selectedPhotos.indexOf(draggedId) !== -1 && self.selectedPhotos.length > 1) {
                         photosToMove = self.selectedPhotos.slice();
@@ -462,14 +458,12 @@ var admin = {
                         photosToMove = [draggedId];
                     }
 
-                    // Перемещаем все DOM-элементы кроме перетащенного (он уже перемещён SortableJS)
                     photosToMove.forEach(function(pid) {
                         if (pid === draggedId) return;
                         var el = document.querySelector('[data-id="' + pid + '"]');
                         if (el) targetGrid.appendChild(el);
                     });
 
-                    // Обновляем section_id в памяти
                     photosToMove.forEach(function(pid) {
                         for (var i = 0; i < gallery.visiblePhotos.length; i++) {
                             if (gallery.visiblePhotos[i].id === pid) {
@@ -482,7 +476,6 @@ var admin = {
 
                     gallery._updateUnsectionedVisibility();
 
-                    // Сохраняем новый порядок всей целевой сетки на сервер
                     var items = targetGrid.querySelectorAll('.photo-item');
                     var orders = [];
                     items.forEach(function(item, idx) {
@@ -494,7 +487,6 @@ var admin = {
                     });
                     api.reorderPhotos(folderId, orders);
 
-                    // Снимаем выделение после перемещения
                     if (self.isSelectionMode && photosToMove.length > 1) {
                         self.exitSelectionMode();
                         setTimeout(function() { admin.initPhotosSortable(); }, 100);
@@ -609,7 +601,6 @@ var admin = {
             btnHide.disabled = !has;
             btnHide.style.opacity = has ? '1' : '0.5';
         }
-        // Кнопка "Переместить в секцию" — только в режиме секций
         if (btnMove) {
             btnMove.disabled = !has;
             btnMove.style.opacity = has ? '1' : '0.5';
@@ -669,19 +660,16 @@ var admin = {
         });
     },
 
-    // Переместить выбранные фото в секцию (используется в режиме секций)
     moveSelectedToSection: function() {
         var self = this;
         if (self.selectedPhotos.length === 0 || !gallery.currentFolder) return;
 
-        // Собираем список доступных секций
         var sections = gallery.sections || [];
         if (sections.length === 0) {
             alert('Сначала создайте хотя бы одну секцию.');
             return;
         }
 
-        // Формируем список для выбора
         var message = 'Выберите секцию (введите номер):\n\n0. Без секции (нераспределённые)\n';
         sections.forEach(function(s, idx) {
             message += (idx + 1) + '. ' + s.title + '\n';
@@ -708,11 +696,9 @@ var admin = {
         var folderId = gallery.currentFolder.id;
         var toMove = self.selectedPhotos.slice();
 
-        // Перемещаем DOM-элементы
         toMove.forEach(function(pid) {
             var el = document.querySelector('[data-id="' + pid + '"]');
             if (el) targetGrid.appendChild(el);
-            // Обновляем в памяти
             for (var i = 0; i < gallery.visiblePhotos.length; i++) {
                 if (gallery.visiblePhotos[i].id === pid) {
                     if (targetSectionId) gallery.visiblePhotos[i].section_id = targetSectionId;
@@ -724,7 +710,6 @@ var admin = {
 
         gallery._updateUnsectionedVisibility();
 
-        // Сохраняем на сервер
         var items = targetGrid.querySelectorAll('.photo-item');
         var orders = [];
         items.forEach(function(item, idx) {

@@ -225,6 +225,10 @@ var gallery = {
         }
         container.innerHTML = html;
 
+        // Показываем баннер для страницы папок (folderId=null)
+        self._showFirstLoadBannerIfNeeded(null);
+        self._trackImagesLoading(null, self.folders.length);
+
         for (var k = 0; k < self.folders.length; k++) {
             self.loadFolderCover(self.folders[k]);
         }
@@ -392,36 +396,108 @@ var gallery = {
 
     // === БАННЕР ПЕРВОЙ ЗАГРУЗКИ ===
     _isFirstLoad: function(folderId) {
+        // folderId = null означает страницу с папками
+        var key = folderId || '__folders__';
         try {
             var loaded = JSON.parse(localStorage.getItem(CACHE_KEY_LOADED_FOLDERS) || '{}');
-            return !loaded[folderId];
+            return !loaded[key];
         } catch(e) { return true; }
     },
 
     _markFolderLoaded: function(folderId) {
+        var key = folderId || '__folders__';
         try {
             var loaded = JSON.parse(localStorage.getItem(CACHE_KEY_LOADED_FOLDERS) || '{}');
-            loaded[folderId] = true;
+            loaded[key] = true;
             localStorage.setItem(CACHE_KEY_LOADED_FOLDERS, JSON.stringify(loaded));
         } catch(e) {}
     },
 
     _showFirstLoadBannerIfNeeded: function(folderId) {
+        if (!this._isFirstLoad(folderId)) return;
         var banner = document.getElementById('first-load-banner');
+        var overlay = document.getElementById('first-load-banner-overlay');
         if (!banner) return;
-        if (this._isFirstLoad(folderId)) {
-            banner.style.display = 'block';
-            var progress = document.getElementById('banner-progress-text');
-            if (progress) progress.textContent = '';
-        } else {
-            banner.style.display = 'none';
-        }
+        banner.style.display = 'block';
+        if (overlay) overlay.style.display = 'block';
+        var counter = document.getElementById('banner-counter-text');
+        var sub = document.getElementById('banner-sub-text');
+        if (counter) counter.textContent = '';
+        if (sub) sub.textContent = '';
     },
 
     _hideFirstLoadBanner: function(folderId) {
         var banner = document.getElementById('first-load-banner');
+        var overlay = document.getElementById('first-load-banner-overlay');
         if (banner) banner.style.display = 'none';
+        if (overlay) overlay.style.display = 'none';
         this._markFolderLoaded(folderId);
+    },
+
+    // Запускает отслеживание загрузки img и обновляет счётчик
+    _trackImagesLoading: function(folderId, total) {
+        var self = this;
+        if (!this._isFirstLoad(folderId)) return;
+
+        var loaded = 0;
+        var counter = document.getElementById('banner-counter-text');
+        var sub = document.getElementById('banner-sub-text');
+
+        if (counter) counter.textContent = '0 / ' + total;
+        if (sub) sub.textContent = 'фото загружено';
+
+        // Наблюдаем за всеми img в photos-container и folders-container
+        var containerId = folderId ? 'photos-container' : 'folders-container';
+
+        function checkDone() {
+            loaded++;
+            if (counter) counter.textContent = loaded + ' / ' + total;
+            if (loaded >= total) {
+                // Небольшая пауза чтобы последнее фото успело отрисоваться
+                setTimeout(function() {
+                    self._hideFirstLoadBanner(folderId);
+                }, 600);
+            }
+        }
+
+        // Подписываемся на load/error каждого img
+        // Используем MutationObserver чтобы ловить img которые добавляются порциями
+        var container = document.getElementById(containerId);
+        if (!container) { self._hideFirstLoadBanner(folderId); return; }
+
+        var observed = new Set();
+
+        function attachToImg(img) {
+            if (observed.has(img)) return;
+            observed.add(img);
+            if (img.complete) {
+                checkDone();
+            } else {
+                img.addEventListener('load',  checkDone, { once: true });
+                img.addEventListener('error', checkDone, { once: true });
+            }
+        }
+
+        // Вешаем на уже существующие img
+        var existing = container.querySelectorAll('img[src]');
+        existing.forEach(attachToImg);
+
+        // MutationObserver для порционно добавляемых img
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                m.addedNodes.forEach(function(node) {
+                    if (node.nodeType !== 1) return;
+                    if (node.tagName === 'IMG') attachToImg(node);
+                    node.querySelectorAll && node.querySelectorAll('img[src]').forEach(attachToImg);
+                });
+            });
+            // Если все уже отслежены — проверяем
+            if (observed.size >= total) observer.disconnect();
+        });
+        observer.observe(container, { childList: true, subtree: true });
+
+        // Страховка: если через 30 сек ещё не закрылся — закрываем
+        setTimeout(function() { self._hideFirstLoadBanner(folderId); }, 30000);
     },
 
     // === ОТКРЫТИЕ ПАПКИ ===
@@ -558,9 +634,11 @@ var gallery = {
         var BATCH = 20;
         var total = self.visiblePhotos.length;
 
+        // Запускаем отслеживание загрузки img ДО рендера
+        self._trackImagesLoading(folderId, total);
+
         // Первая порция — сразу
         self.renderPhotos(0);
-        self._hideFirstLoadBanner(folderId);
 
         if (total <= BATCH) return;
 

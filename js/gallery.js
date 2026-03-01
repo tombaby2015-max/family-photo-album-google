@@ -642,6 +642,32 @@ var gallery = {
 
     _buildDisplayOrder: function() {
         var self = this;
+        // Строим порядок из реального DOM — именно в том порядке как фото отображаются
+        // (нераспределённые → секция 1 → секция 2 → ...)
+        // Это важно для корректного перелистывания когда есть секции
+        var container = document.getElementById('photos-container');
+        if (container) {
+            var items = container.querySelectorAll('.photo-item');
+            var domOrder = [];
+            items.forEach(function(el) {
+                var id = el.getAttribute('data-id');
+                if (id) domOrder.push(id);
+            });
+            if (domOrder.length > 0) {
+                // Перестраиваем visiblePhotos в порядке DOM
+                var photoMap = {};
+                self.visiblePhotos.forEach(function(p) { photoMap[p.id] = p; });
+                var reordered = [];
+                domOrder.forEach(function(id) {
+                    if (photoMap[id]) reordered.push(photoMap[id]);
+                });
+                // Добавляем фото которых нет в DOM (на случай рассинхронизации)
+                self.visiblePhotos.forEach(function(p) {
+                    if (!photoMap[p.id] || domOrder.indexOf(p.id) === -1) reordered.push(p);
+                });
+                self.visiblePhotos = reordered;
+            }
+        }
         self._displayOrder = self.visiblePhotos.map(function(p) { return p.id; });
     },
 

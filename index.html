@@ -101,26 +101,33 @@
         }
 
         /* Кнопка "Пополнить альбом" */
+        #replenish-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+        }
         #replenish-btn {
-            display: block;
-            text-align: center;
-            padding: 0 0 10px 0;
+            display: inline;
             background: none;
             border: none;
             cursor: pointer;
             font-family: inherit;
             font-size: 14px;
             color: #666;
+            padding: 0;
+            width: auto;
             text-decoration: none;
-            width: 100%;
         }
         #replenish-btn:hover {
             color: #000;
         }
         #replenish-popup {
             display: none;
-            margin: 0 auto 30px auto;
+            margin: 0 0 20px 0;
             max-width: 500px;
+            width: 100%;
             background: #fff;
             border: 1px solid #ddd;
             border-radius: 12px;
@@ -130,6 +137,8 @@
             color: #333;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             position: relative;
+            text-align: center;
+            box-sizing: border-box;
         }
         #replenish-popup a {
             color: #000;
@@ -337,12 +346,19 @@
                 <div class="loading">Загрузка фото...</div>
             </div>
 
-            <!-- Разделитель в конце папки -->
-            <div class="folder-divider" id="folder-bottom-divider">
-                <div class="folder-divider__inner">
-                    <div class="folder-divider__fade-left"></div>
-                    <div class="folder-divider__line"></div>
-                    <div class="folder-divider__fade-right"></div>
+        </div>
+
+        <!-- Разделитель t029 в конце папки -->
+        <div class="r t-rec t-rec_pt_60 t-rec_pb_60" style="padding-top:60px;padding-bottom:60px;">
+            <div class="t029">
+                <div class="t029__container t-container">
+                    <div class="t029__col t-col t-col_8">
+                        <div class="t029__linewrapper" style="opacity:0.2;">
+                            <div class="t029__opacity t029__opacity_left" style="background-image: linear-gradient(to left, #000000, rgba(0,0,0,0));"></div>
+                            <div class="t-divider t029__line" style="background: #000000;"></div>
+                            <div class="t029__opacity t029__opacity_right" style="background-image: linear-gradient(to right, #000000, rgba(0,0,0,0));"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -397,7 +413,7 @@
     </button>
 
     <!-- КНОПКА ПОПОЛНИТЬ АЛЬБОМ -->
-    <div id="replenish-area" style="text-align:center;">
+    <div id="replenish-area">
         <div id="replenish-popup">
             <button id="replenish-popup__close" onclick="closeReplenish()">✕</button>
             Если хотите пополнить альбом, присылайте фотографии на почту<br>

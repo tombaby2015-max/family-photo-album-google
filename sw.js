@@ -5,7 +5,7 @@
 // - Повторные запросы: отдаём мгновенно из кеша, без сети
 // ИСПРАВЛЕНО: очередь запросов MAX_CONCURRENT=4, повтор при ошибке до 3 раз
 
-const CACHE_NAME = 'photo-thumbs-v2';
+const CACHE_NAME = 'photo-thumbs-v1';
 const THUMB_PATTERN = /\/photo\?.*size=thumb/;
 
 // ==========================================
@@ -20,7 +20,7 @@ function processQueue() {
   while (_queue.length > 0 && _activeRequests < MAX_CONCURRENT) {
     var item = _queue.shift();
     _activeRequests++;
-    fetchWithRetry(item.request, 3)
+    fetchWithRetry(item.url, 3)
       .then(function(response) {
         _activeRequests--;
         item.resolve(response);
@@ -37,15 +37,16 @@ function processQueue() {
 // ==========================================
 // ПОВТОР — при ошибке пробуем ещё раз (до 3 попыток)
 // Пауза 600мс между попытками
+// Каждый раз создаём новый Request из URL — так как объект нельзя клонировать дважды
 // ==========================================
-function fetchWithRetry(request, attemptsLeft) {
-  return fetch(request.clone()).then(function(response) {
+function fetchWithRetry(url, attemptsLeft) {
+  return fetch(new Request(url)).then(function(response) {
     if (response.ok) return response;
     // Сервер вернул 5xx — повторяем
     if (attemptsLeft > 1) {
       return new Promise(function(resolve) {
         setTimeout(function() {
-          resolve(fetchWithRetry(request, attemptsLeft - 1));
+          resolve(fetchWithRetry(url, attemptsLeft - 1));
         }, 600);
       });
     }
@@ -55,7 +56,7 @@ function fetchWithRetry(request, attemptsLeft) {
     if (attemptsLeft > 1) {
       return new Promise(function(resolve) {
         setTimeout(function() {
-          resolve(fetchWithRetry(request, attemptsLeft - 1));
+          resolve(fetchWithRetry(url, attemptsLeft - 1));
         }, 600);
       });
     }
@@ -63,9 +64,9 @@ function fetchWithRetry(request, attemptsLeft) {
   });
 }
 
-function queuedFetch(request) {
+function queuedFetch(url) {
   return new Promise(function(resolve, reject) {
-    _queue.push({ request: request, resolve: resolve, reject: reject });
+    _queue.push({ url: url, resolve: resolve, reject: reject });
     processQueue();
   });
 }
@@ -119,7 +120,7 @@ self.addEventListener('fetch', function(event) {
 
         // CACHE MISS — в очередь, максимум 4 параллельно
         console.log('[SW] Cache MISS, загружаем:', url.split('?')[1]);
-        return queuedFetch(event.request).then(function(response) {
+        return queuedFetch(url).then(function(response) {
           if (response.ok) {
             cache.put(event.request, response.clone());
             console.log('[SW] Закешировано:', url.split('?')[1]);

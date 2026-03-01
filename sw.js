@@ -5,7 +5,7 @@
 // - Повторные запросы: отдаём мгновенно из кеша, без сети
 // ИСПРАВЛЕНО: очередь запросов MAX_CONCURRENT=4, повтор при ошибке до 3 раз
 
-const CACHE_NAME = 'photo-thumbs-v1';
+const CACHE_NAME = 'photo-thumbs-v2';
 const THUMB_PATTERN = /\/photo\?.*size=thumb/;
 
 // ==========================================

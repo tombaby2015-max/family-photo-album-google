@@ -628,52 +628,16 @@ var gallery = {
         self._buildDisplayOrder();
     },
 
-    // Рендерит фото порциями — первые 20 сразу, остальные через requestIdleCallback
+    // Рендерит все фото сразу + запускает счётчик загрузки для баннера
     _renderPhotosInBatches: function(allPhotos, folderId) {
         var self = this;
-        var BATCH = 20;
         var total = self.visiblePhotos.length;
 
         // Запускаем отслеживание загрузки img ДО рендера
         self._trackImagesLoading(folderId, total);
 
-        // Первая порция — сразу
+        // Рендерим все фото сразу (порционность убрана — ломала перелистывание в секциях)
         self.renderPhotos(0);
-
-        if (total <= BATCH) return;
-
-        // Остальные порции — когда браузер свободен
-        var rendered = BATCH;
-        function renderNext() {
-            if (rendered >= total) return;
-            var end = Math.min(rendered + BATCH, total);
-            for (var i = rendered; i < end; i++) {
-                var photo = self.visiblePhotos[i];
-                var grid = self._getPhotoGrid(photo);
-                if (grid) {
-                    var html = self.createPhotoItem(photo, i);
-                    var div = document.createElement('div');
-                    div.innerHTML = html;
-                    grid.appendChild(div.firstChild);
-                }
-            }
-            self._buildDisplayOrder();
-            rendered = end;
-            if (rendered < total) {
-                if (window.requestIdleCallback) {
-                    requestIdleCallback(renderNext, { timeout: 300 });
-                } else {
-                    setTimeout(renderNext, 50);
-                }
-            }
-        }
-
-        // Запускаем вторую порцию чуть позже
-        if (window.requestIdleCallback) {
-            requestIdleCallback(renderNext, { timeout: 300 });
-        } else {
-            setTimeout(renderNext, 100);
-        }
     },
 
     _buildDisplayOrder: function() {

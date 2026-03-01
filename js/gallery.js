@@ -507,6 +507,28 @@ var gallery = {
                     allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName + '&name=' + photoName;
                 }
 
+                // Строим visiblePhotos в том же порядке, в каком они будут показаны на экране:
+                // сначала фото без секции, затем фото каждой секции в порядке секций
+                var ordered = [];
+                var bySection = {};
+                for (var ii = 0; ii < allPhotos.length; ii++) {
+                    var pp = allPhotos[ii];
+                    if (pp.section_id) {
+                        if (!bySection[pp.section_id]) bySection[pp.section_id] = [];
+                        bySection[pp.section_id].push(pp);
+                    } else {
+                        ordered.push(pp);
+                    }
+                }
+                var sections = self.sections || [];
+                for (var si = 0; si < sections.length; si++) {
+                    var sPhotos = bySection[sections[si].id] || [];
+                    for (var sj = 0; sj < sPhotos.length; sj++) {
+                        ordered.push(sPhotos[sj]);
+                    }
+                }
+                self.visiblePhotos = ordered;
+
                 if (container) container.innerHTML = '';
                 self.renderPhotos(0);
                 // Скрываем баннер — фото загружены, запоминаем папку как загруженную

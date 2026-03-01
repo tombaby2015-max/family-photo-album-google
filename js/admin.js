@@ -487,9 +487,6 @@ var admin = {
                     });
                     api.reorderPhotos(folderId, orders);
 
-                    // Пересобираем порядок листания из DOM после перетаскивания
-                    gallery._rebuildVisiblePhotosFromDOM();
-
                     if (self.isSelectionMode && photosToMove.length > 1) {
                         self.exitSelectionMode();
                         setTimeout(function() { admin.initPhotosSortable(); }, 100);
@@ -723,9 +720,6 @@ var admin = {
             });
         });
         api.reorderPhotos(folderId, orders);
-
-        // Пересобираем порядок листания из DOM после перемещения в секцию
-        gallery._rebuildVisiblePhotosFromDOM();
 
         self.exitSelectionMode();
         setTimeout(function() { admin.initPhotosSortable(); }, 100);

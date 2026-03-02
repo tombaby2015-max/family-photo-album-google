@@ -1,25 +1,26 @@
-// worker.js — ОПТИМИЗИРОВАННАЯ версия (План Б)
+// worker.js
 //
-// ГЛАВНОЕ ИЗМЕНЕНИЕ: структура хранения в KV
+// СТРУКТУРА KV:
+//   folder:ABC        → { title, hidden, order, cover_url, ..., photos: [...с thumbnailLink] }
+//   folders_index     → [ ...все папки для главной страницы ]
+//   sections:ABC      → [ ...секции папки ]
+//   thumb:FILE_ID     → thumbnailLink (создаётся лениво при первом запросе миниатюры, TTL 30 дней)
+//   google_access_token
+//   admin_token:XXX
 //
-// БЫЛО (старая структура — медленно):
-//   folder:ABC          → { title, hidden, order, cover_url, ... }
-//   photo:ABC:photo1    → { name, hidden, deleted, ... }
-//   photo:ABC:photo2    → { name, hidden, deleted, ... }
-//   photo:ABC:photo3    → { name, hidden, deleted, ... }
-//   ... (100 отдельных ключей на папку = 100 запросов к KV)
-//
-// СТАЛО (новая структура — быстро):
-//   folder:ABC          → { title, hidden, order, cover_url, ..., photos: [...все фото сразу] }
-//   folders_index       → [ ...все папки сразу для быстрой загрузки главной страницы ]
-//   sections:ABC        → [ ...секции папки ] (не изменилось)
-//
-// ИТОГ: вместо 800+ запросов к KV — 1-8 запросов.
+// КЛЮЧЕВАЯ ЛОГИКА thumb:
+//   /sync — НЕ создаёт thumb: ключи вообще (избегаем лимита KV операций)
+//   /photo?size=thumb — при первом запросе сам находит thumbnailLink в папке
+//                       и кладёт в KV.put("thumb:FILE_ID", ttl=30д). Один раз. Лениво.
+//                       Следующие запросы — мгновенный KV.get без чтения папки.
+//   Memory cache (Map) — защита от stampede: повторные запросы в рамках одного
+//                        инстанса воркера не делают лишних KV.get
+
+// Улучшение 1: memory cache против stampede
+const thumbMemoryCache = new Map();
 
 export default {
   async fetch(request, env, ctx) {
-    console.log('=== Запрос:', request.method, request.url);
-
     const corsHeaders = {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
@@ -42,31 +43,118 @@ export default {
     const isAdmin = token ? !!(await env.PHOTO_KV.get(`admin_token:${token}`)) : false;
 
     // ==========================================
-    // ПОКАЗ ФОТО (проксирование через воркер)
-    // Не изменилось — Google Drive не даёт прямые ссылки
-    // Добавлено: кеширование через Cloudflare Cache API
+    // ПОКАЗ ФОТО
     // ==========================================
     if (request.method === "GET" && url.pathname === "/photo") {
       const fileId = url.searchParams.get("id");
-      const size = url.searchParams.get("size") || "thumb";
-      const folderName = url.searchParams.get("folder") || "";  // название папки для имени файла
+      const size   = url.searchParams.get("size") || "thumb";
+      const folderName = url.searchParams.get("folder") || "";
+      const folderId   = url.searchParams.get("folder_id") || "";
+
       if (!fileId) return new Response("id required", { status: 400 });
 
-      // Для кеша используем ключ без параметра folder (чтобы не дублировать кеш)
+      // --- МИНИАТЮРЫ: ленивое кеширование ---
+      if (size === "thumb") {
+
+        // 1. Быстрый путь — memory cache (защита от stampede)
+if (thumbMemoryCache.has(fileId)) {
+          const thumbUrl = thumbMemoryCache.get(fileId).replace(/=s\d+$/, '=s400');
+          const googleResp = await fetch(thumbUrl);
+          if (!googleResp.ok) {
+            return new Response("Thumbnail not available", { status: 404, headers: corsHeaders });
+          }
+          return new Response(googleResp.body, {
+            headers: {
+              ...corsHeaders,
+              "Content-Type": googleResp.headers.get("content-type") || "image/jpeg",
+              "Cache-Control": "public, max-age=86400",
+            }
+          });
+        }
+
+        // 2. Быстрый путь — уже есть в KV
+        const cached = await env.PHOTO_KV.get(`thumb:${fileId}`);
+        if (cached) {
+          // Улучшение 3: валидация перед использованием закешированного значения
+if (cached.startsWith('https://')) {
+            thumbMemoryCache.set(fileId, cached);
+            const thumbUrl = cached.replace(/=s\d+$/, '=s400');
+            const googleResp = await fetch(thumbUrl);
+            if (!googleResp.ok) {
+              return new Response("Thumbnail not available", { status: 404, headers: corsHeaders });
+            }
+            return new Response(googleResp.body, {
+              headers: {
+                ...corsHeaders,
+                "Content-Type": googleResp.headers.get("content-type") || "image/jpeg",
+                "Cache-Control": "public, max-age=86400",
+              }
+            });
+          }
+          // Мусор в KV — удаляем и идём дальше
+          ctx.waitUntil(env.PHOTO_KV.delete(`thumb:${fileId}`));
+        }
+
+        // 3. Медленный путь — ищем thumbnailLink в папке (один раз за всю жизнь фото)
+        let thumbLink = null;
+
+        if (folderId) {
+          // Знаем папку — 1 KV.get
+          const folder = await getFolder(env, folderId);
+          if (folder?.photos) {
+            const photo = folder.photos.find(p => p.file_id === fileId);
+            if (photo?.thumbnailLink) thumbLink = photo.thumbnailLink;
+          }
+        }
+
+        if (!thumbLink) {
+          // Не знаем папку — перебираем индекс (редкий случай)
+          const index = await getFoldersIndex(env);
+          for (const meta of index) {
+            const folder = await getFolder(env, meta.id);
+            if (folder?.photos) {
+              const photo = folder.photos.find(p => p.file_id === fileId);
+              if (photo?.thumbnailLink) { thumbLink = photo.thumbnailLink; break; }
+            }
+          }
+        }
+
+        // Улучшение 3: валидация thumbnailLink перед кешированием
+if (thumbLink && thumbLink.startsWith('https://')) {
+          thumbMemoryCache.set(fileId, thumbLink);
+
+          ctx.waitUntil(
+            env.PHOTO_KV.put(`thumb:${fileId}`, thumbLink, { expirationTtl: 60 * 60 * 24 * 30 })
+          );
+
+          const thumbUrl = thumbLink.replace(/=s\d+$/, '=s400');
+          const googleResp = await fetch(thumbUrl);
+          if (!googleResp.ok) {
+            return new Response("Thumbnail not available", { status: 404, headers: corsHeaders });
+          }
+          const contentType = googleResp.headers.get("content-type") || "image/jpeg";
+          return new Response(googleResp.body, {
+            headers: {
+              ...corsHeaders,
+              "Content-Type": contentType,
+              "Cache-Control": "public, max-age=86400",
+            }
+          });
+        }
+
+        // thumbnailLink не найден — fallback: проксируем оригинал
+        console.log('[thumb] thumbnailLink не найден для', fileId, '— fallback на оригинал');
+      }
+
+      // --- ОРИГИНАЛЫ и fallback ---
       const cache = caches.default;
       const cacheKey = new Request(`${workerBase}/photo?id=${fileId}&size=${size}`);
-      const cachedResponse = await cache.match(cacheKey);
-      if (cachedResponse && size !== "original") {
-        // Для оригиналов не отдаём из кеша — нужно поставить правильный Content-Disposition
-        return cachedResponse;
-      }
+      const cachedResp = await cache.match(cacheKey);
+      if (cachedResp && size !== "original") return cachedResp;
 
       try {
         const accessToken = await getGoogleAccessToken(env);
-
-        // Имя файла берём из параметра URL (передаётся из gallery.js)
-        // Не делаем отдельный запрос к Drive API за metadata
-        const photoName = url.searchParams.get("name") || "photo.jpg";
+        const photoName   = url.searchParams.get("name") || "photo.jpg";
 
         const resp = await fetch(
           `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
@@ -78,7 +166,6 @@ export default {
         }
 
         const contentType = resp.headers.get("content-type") || "image/jpeg";
-
         const headers = {
           ...corsHeaders,
           "Content-Type": contentType,
@@ -86,22 +173,13 @@ export default {
         };
 
         if (size === "original") {
-          // Формируем имя: "Название папки — IMG_2045.jpg"
           const decodedFolder = folderName ? decodeURIComponent(folderName) : "";
-          const downloadName = decodedFolder
-            ? `${decodedFolder} — ${photoName}`
-            : photoName;
-          // encodeURIComponent для поддержки кириллицы в имени файла
+          const downloadName  = decodedFolder ? `${decodedFolder} — ${photoName}` : photoName;
           headers["Content-Disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
         }
 
         const response = new Response(resp.body, { headers });
-
-        // Кешируем только миниатюры (оригиналы не кешируем — у них динамический заголовок)
-        if (size !== "original") {
-          ctx.waitUntil(cache.put(cacheKey, response.clone()));
-        }
-
+        if (size !== "original") ctx.waitUntil(cache.put(cacheKey, response.clone()));
         return response;
 
       } catch (e) {
@@ -110,34 +188,17 @@ export default {
     }
 
     // ==========================================
-    // СПИСОК ПАПОК — ГЛАВНАЯ ОПТИМИЗАЦИЯ
-    //
-    // БЫЛО: 1 list() + 8 get(folder) + 8 list(photos) + 800 get(photo) = ~820 запросов
-    // СТАЛО: 1 get(folders_index) = 1 запрос
-    //
-    // folders_index содержит все папки сразу, включая photo_count
-    // Фото внутри папки НЕ передаются здесь — только метаданные папок
+    // СПИСОК ПАПОК
     // ==========================================
     if (request.method === "GET" && url.pathname === "/folders") {
-      // Читаем индекс всех папок — один запрос вместо сотен
       let folders = await getFoldersIndex(env);
-
-      // Сортируем по полю order
       folders.sort((a, b) => (a.order || 0) - (b.order || 0));
-
-      // Обычный посетитель не видит скрытые папки
-      if (!isAdmin) {
-        folders = folders.filter(f => !f.hidden);
-      }
-
+      if (!isAdmin) folders = folders.filter(f => !f.hidden);
       return json({ folders }, corsHeaders);
     }
 
     // ==========================================
-    // СПИСОК ФОТО В ПАПКЕ — ВТОРАЯ ОПТИМИЗАЦИЯ
-    //
-    // БЫЛО: 1 list() + 100 get(photo) = 101 запрос
-    // СТАЛО: 1 get(folder:ID) → поле photos внутри = 1 запрос
+    // СПИСОК ФОТО В ПАПКЕ
     // ==========================================
     if (request.method === "GET" && url.pathname === "/photos/list") {
       const folderId = url.searchParams.get("folder_id");
@@ -146,16 +207,12 @@ export default {
       const folder = await getFolder(env, folderId);
       if (!folder) return json({ photos: [] }, corsHeaders);
 
-      let photos = folder.photos || [];
-
-      // Фильтруем удалённые и скрытые
-      photos = photos.filter(p => {
+      let photos = (folder.photos || []).filter(p => {
         if (p.deleted) return false;
         if (!isAdmin && p.hidden) return false;
         return true;
       });
 
-      // Сортировка: сначала по полю order (если задан), потом по имени файла
       photos.sort((a, b) => {
         if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
         if (a.order !== undefined) return -1;
@@ -167,38 +224,36 @@ export default {
     }
 
     // ==========================================
-    // ССЫЛКИ ДЛЯ ПРОСМОТРА (миниатюры) — не изменилось
-    // Просто формируем URL-адреса, никаких запросов к KV
+    // ССЫЛКИ ДЛЯ МИНИАТЮР
     // ==========================================
     if (request.method === "POST" && url.pathname === "/photos/thumbnails") {
-      const body = await request.json();
-      const photos = body.photos || [];
+      const body     = await request.json();
+      const photos   = body.photos   || [];
+      const folderId = body.folder_id || "";
 
       const urls = {};
       for (const photo of photos) {
-        urls[photo.id] = `${workerBase}/photo?id=${photo.file_id}&size=thumb`;
+        urls[photo.id] = `${workerBase}/photo?id=${photo.file_id}&size=thumb&folder_id=${folderId}`;
       }
-
       return json({ urls }, corsHeaders);
     }
 
     // ==========================================
-    // ССЫЛКИ ДЛЯ СКАЧИВАНИЯ (оригиналы) — не изменилось
+    // ССЫЛКИ ДЛЯ СКАЧИВАНИЯ (оригиналы)
     // ==========================================
     if (request.method === "POST" && url.pathname === "/photos/urls") {
-      const body = await request.json();
+      const body   = await request.json();
       const photos = body.photos || [];
 
       const urls = {};
       for (const photo of photos) {
         urls[photo.id] = `${workerBase}/photo?id=${photo.file_id}&size=original`;
       }
-
       return json({ urls }, corsHeaders);
     }
 
     // ==========================================
-    // ВХОД В АДМИНКУ — не изменилось
+    // ВХОД В АДМИНКУ
     // ==========================================
     if (request.method === "POST" && url.pathname === "/admin/login") {
       const body = await request.json();
@@ -213,10 +268,9 @@ export default {
     // ==========================================
     // СИНХРОНИЗАЦИЯ С GOOGLE DRIVE
     //
-    // Логика та же: сравниваем что есть в Drive с тем что в KV.
-    // Изменение: теперь пишем данные в новую структуру.
-    // Фото папки хранятся ВНУТРИ объекта папки, а не отдельными ключами.
-    // В конце обновляем folders_index.
+    // ⚠️ thumb: ключи здесь НЕ создаются намеренно.
+    // thumbnailLink сохраняется только внутри объекта фото в папке.
+    // thumb: ключ создастся лениво при первом запросе миниатюры.
     // ==========================================
     if (request.method === "POST" && url.pathname === "/sync") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
@@ -224,43 +278,31 @@ export default {
       try {
         const accessToken = await getGoogleAccessToken(env);
 
-        // Получаем все папки из Google Drive
         const foldersResp = await fetch(
           `https://www.googleapis.com/drive/v3/files?q='${env.DRIVE_FOLDER_ID}'+in+parents+and+mimeType='application/vnd.google-apps.folder'+and+trashed=false&fields=files(id,name)&orderBy=name`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        const foldersData = await foldersResp.json();
+        const foldersData  = await foldersResp.json();
         const driveFolders = foldersData.files || [];
         const driveFolderIds = new Set(driveFolders.map(f => f.id));
 
-        let syncedFolders = 0;
-        let syncedPhotos = 0;
-        let deletedFolders = 0;
-        let deletedPhotos = 0;
+        let syncedFolders = 0, syncedPhotos = 0, deletedFolders = 0, deletedPhotos = 0;
 
-        // Читаем текущий индекс папок
         const currentIndex = await getFoldersIndex(env);
-        const currentFolderIds = new Set(currentIndex.map(f => f.id));
 
-        // Удаляем папки которых нет в Drive
-        for (const existingFolder of currentIndex) {
-          if (!driveFolderIds.has(existingFolder.id)) {
-            await env.PHOTO_KV.delete(`folder:${existingFolder.id}`);
-            await env.PHOTO_KV.delete(`sections:${existingFolder.id}`);
+        for (const existing of currentIndex) {
+          if (!driveFolderIds.has(existing.id)) {
+            await env.PHOTO_KV.delete(`folder:${existing.id}`);
+            await env.PHOTO_KV.delete(`sections:${existing.id}`);
             deletedFolders++;
-            deletedPhotos += (existingFolder.photo_count || 0);
+            deletedPhotos += (existing.photo_count || 0);
           }
         }
 
-        // Синхронизируем каждую папку из Drive
         for (const driveFolder of driveFolders) {
-          const folderKey = `folder:${driveFolder.id}`;
-
-          // Читаем существующие данные папки (или создаём новые)
           let folderData = await getFolder(env, driveFolder.id);
-          const isNew = !folderData;
 
-          if (isNew) {
+          if (!folderData) {
             folderData = {
               title: driveFolder.name,
               hidden: false,
@@ -270,71 +312,56 @@ export default {
               cover_y: 50,
               cover_scale: 100,
               photos: [],
-              schema: 2  // новая схема хранения
+              schema: 2
             };
             syncedFolders++;
           }
 
-          // Получаем все фото этой папки из Google Drive
           const drivePhotos = [];
           let pageToken = null;
           do {
-            let photosUrl = `https://www.googleapis.com/drive/v3/files?q='${driveFolder.id}'+in+parents+and+(mimeType='image/jpeg'+or+mimeType='image/png'+or+mimeType='image/heic'+or+mimeType='image/webp')+and+trashed=false&fields=files(id,name,mimeType,createdTime)&orderBy=name&pageSize=1000`;
+            let photosUrl = `https://www.googleapis.com/drive/v3/files?q='${driveFolder.id}'+in+parents+and+(mimeType='image/jpeg'+or+mimeType='image/png'+or+mimeType='image/heic'+or+mimeType='image/webp')+and+trashed=false&fields=files(id,name,mimeType,createdTime,thumbnailLink)&orderBy=name&pageSize=1000`;
             if (pageToken) photosUrl += `&pageToken=${pageToken}`;
-
-            const photosResp = await fetch(photosUrl, {
-              headers: { Authorization: `Bearer ${accessToken}` }
-            });
+            const photosResp = await fetch(photosUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
             const photosData = await photosResp.json();
             drivePhotos.push(...(photosData.files || []));
             pageToken = photosData.nextPageToken || null;
           } while (pageToken);
 
-          const drivePhotoIds = new Set(drivePhotos.map(p => p.id));
-
-          // Существующие фото в KV (чтобы сохранить их настройки: hidden, order, section_id)
+          const drivePhotoIds    = new Set(drivePhotos.map(p => p.id));
           const existingPhotosMap = {};
-          for (const p of (folderData.photos || [])) {
-            existingPhotosMap[p.file_id] = p;
-          }
+          for (const p of (folderData.photos || [])) existingPhotosMap[p.file_id] = p;
 
-          // Собираем новый список фото:
-          // - берём все фото из Drive
-          // - если фото уже было — сохраняем его настройки (hidden, order, section_id)
-          // - если фото новое — создаём с дефолтными настройками
           const newPhotos = [];
-          for (const drivePhoto of drivePhotos) {
-            if (existingPhotosMap[drivePhoto.id]) {
-              // Фото уже знакомо — сохраняем его настройки
-              newPhotos.push(existingPhotosMap[drivePhoto.id]);
+          for (const dp of drivePhotos) {
+            if (existingPhotosMap[dp.id]) {
+              const ep = existingPhotosMap[dp.id];
+              if (dp.thumbnailLink) ep.thumbnailLink = dp.thumbnailLink;
+              newPhotos.push(ep);
             } else {
-              // Новое фото из Drive
-              newPhotos.push({
-                id: drivePhoto.id,        // id = file_id для простоты
-                file_id: drivePhoto.id,
-                name: drivePhoto.name,
-                date: drivePhoto.createdTime,
+              const np = {
+                id: dp.id,
+                file_id: dp.id,
+                name: dp.name,
+                date: dp.createdTime,
                 deleted: false,
                 hidden: false,
                 schema: 2
-              });
+              };
+              if (dp.thumbnailLink) np.thumbnailLink = dp.thumbnailLink;
+              newPhotos.push(np);
               syncedPhotos++;
             }
           }
 
-          // Считаем удалённые фото (были в KV, нет в Drive)
           for (const p of (folderData.photos || [])) {
-            if (!drivePhotoIds.has(p.file_id) && !p.deleted) {
-              deletedPhotos++;
-            }
+            if (!drivePhotoIds.has(p.file_id) && !p.deleted) deletedPhotos++;
           }
 
-          // Обновляем папку с новым списком фото
           folderData.photos = newPhotos;
-          await env.PHOTO_KV.put(folderKey, JSON.stringify(folderData));
+          await env.PHOTO_KV.put(`folder:${driveFolder.id}`, JSON.stringify(folderData));
         }
 
-        // Пересобираем folders_index после синхронизации
         await rebuildFoldersIndex(env);
 
         return json({ success: true, syncedFolders, syncedPhotos, deletedFolders, deletedPhotos }, corsHeaders);
@@ -346,30 +373,27 @@ export default {
     }
 
     // ==========================================
-    // ИЗМЕНЕНИЕ ПАПКИ (название, скрыть, обложка)
-    // Изменение: после обновления пересобираем folders_index
+    // ИЗМЕНЕНИЕ ПАПКИ
     // ==========================================
     if (request.method === "PATCH" && url.pathname === "/folders") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      const body = await request.json();
+      const body     = await request.json();
       const folderId = body.id;
       if (!folderId) return json({ error: "id required" }, corsHeaders, 400);
 
       const folder = await getFolder(env, folderId);
       if (!folder) return json({ error: "folder not found" }, corsHeaders, 404);
 
-      if (body.title !== undefined) folder.title = body.title;
-      if (body.hidden !== undefined) folder.hidden = body.hidden;
-      if (body.order !== undefined) folder.order = body.order;
-      if (body.cover_url !== undefined) folder.cover_url = body.cover_url;
-      if (body.cover_x !== undefined) folder.cover_x = body.cover_x;
-      if (body.cover_y !== undefined) folder.cover_y = body.cover_y;
+      if (body.title       !== undefined) folder.title       = body.title;
+      if (body.hidden      !== undefined) folder.hidden      = body.hidden;
+      if (body.order       !== undefined) folder.order       = body.order;
+      if (body.cover_url   !== undefined) folder.cover_url   = body.cover_url;
+      if (body.cover_x     !== undefined) folder.cover_x     = body.cover_x;
+      if (body.cover_y     !== undefined) folder.cover_y     = body.cover_y;
       if (body.cover_scale !== undefined) folder.cover_scale = body.cover_scale;
 
       await env.PHOTO_KV.put(`folder:${folderId}`, JSON.stringify(folder));
-
-      // Обновляем индекс папок
       await rebuildFoldersIndex(env);
 
       return json({ id: folderId, ...folder }, corsHeaders);
@@ -381,14 +405,13 @@ export default {
     if (request.method === "POST" && url.pathname === "/folders/reorder") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      const body = await request.json();
+      const body   = await request.json();
       const orders = body.orders || [];
+      const CHUNK  = 50;
 
-      // Обновляем порядок параллельно (группами по 50 — лимит Cloudflare)
-      const CHUNK = 50;
       for (let i = 0; i < orders.length; i += CHUNK) {
         const chunk = orders.slice(i, i + CHUNK);
-        await Promise.all(chunk.map(async (item) => {
+        await Promise.all(chunk.map(async item => {
           const folder = await getFolder(env, item.id);
           if (folder) {
             folder.order = item.order;
@@ -397,21 +420,18 @@ export default {
         }));
       }
 
-      // Обновляем индекс
       await rebuildFoldersIndex(env);
-
       return json({ success: true, updated: orders.length }, corsHeaders);
     }
 
     // ==========================================
     // СКРЫТИЕ / ПОКАЗ ФОТО
-    // Изменение: теперь меняем фото внутри массива папки
     // ==========================================
     if (request.method === "PATCH" && url.pathname === "/photos") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      const body = await request.json();
-      const photoId = body.id;
+      const body     = await request.json();
+      const photoId  = body.id;
       const folderId = body.folder_id;
       if (!photoId || !folderId) return json({ error: "id and folder_id required" }, corsHeaders, 400);
 
@@ -430,12 +450,12 @@ export default {
     }
 
     // ==========================================
-    // УДАЛЕНИЕ ФОТО (помечаем deleted=true)
+    // УДАЛЕНИЕ ФОТО
     // ==========================================
     if (request.method === "DELETE" && url.pathname === "/photos") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      const photoId = url.searchParams.get("id");
+      const photoId  = url.searchParams.get("id");
       const folderId = url.searchParams.get("folder_id");
       if (!photoId || !folderId) return json({ error: "id and folder_id required" }, corsHeaders, 400);
 
@@ -453,12 +473,12 @@ export default {
     }
 
     // ==========================================
-    // ПОРЯДОК ФОТО (drag-and-drop в режиме секций)
+    // ПОРЯДОК ФОТО
     // ==========================================
     if (request.method === "POST" && url.pathname === "/photos/reorder") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      const body = await request.json();
+      const body      = await request.json();
       const { folder_id, orders } = body;
       if (!folder_id || !orders) return json({ error: "folder_id and orders required" }, corsHeaders, 400);
 
@@ -466,9 +486,7 @@ export default {
       if (!folder) return json({ success: true }, corsHeaders);
 
       const photosMap = {};
-      for (const p of (folder.photos || [])) {
-        photosMap[p.id] = p;
-      }
+      for (const p of (folder.photos || [])) photosMap[p.id] = p;
 
       for (const item of orders) {
         if (photosMap[item.id]) {
@@ -481,7 +499,6 @@ export default {
       }
 
       await env.PHOTO_KV.put(`folder:${folder_id}`, JSON.stringify(folder));
-
       return json({ success: true }, corsHeaders);
     }
 
@@ -505,20 +522,17 @@ export default {
       else delete photo.section_id;
 
       await env.PHOTO_KV.put(`folder:${folder_id}`, JSON.stringify(folder));
-
       return json({ success: true }, corsHeaders);
     }
 
     // ==========================================
-    // СЕКЦИИ — не изменилось по логике
-    // Секции по-прежнему хранятся как sections:FOLDER_ID
+    // СЕКЦИИ
     // ==========================================
-
     if (request.method === "GET" && url.pathname === "/sections") {
       const folderId = url.searchParams.get("folder_id");
       if (!folderId) return json({ error: "folder_id required" }, corsHeaders, 400);
 
-      const data = await env.PHOTO_KV.get(`sections:${folderId}`);
+      const data     = await env.PHOTO_KV.get(`sections:${folderId}`);
       const sections = data ? JSON.parse(data) : [];
       sections.sort((a, b) => (a.order || 0) - (b.order || 0));
       return json({ sections }, corsHeaders);
@@ -527,11 +541,11 @@ export default {
     if (request.method === "POST" && url.pathname === "/sections") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      const body = await request.json();
+      const body     = await request.json();
       const folderId = body.folder_id;
       if (!folderId) return json({ error: "folder_id required" }, corsHeaders, 400);
 
-      const key = `sections:${folderId}`;
+      const key      = `sections:${folderId}`;
       const existing = await env.PHOTO_KV.get(key);
       const sections = existing ? JSON.parse(existing) : [];
 
@@ -552,12 +566,12 @@ export default {
       const { folder_id, id, title } = body;
       if (!folder_id || !id) return json({ error: "folder_id and id required" }, corsHeaders, 400);
 
-      const key = `sections:${folder_id}`;
+      const key      = `sections:${folder_id}`;
       const existing = await env.PHOTO_KV.get(key);
       if (!existing) return json({ error: "not found" }, corsHeaders, 404);
 
       const sections = JSON.parse(existing);
-      const section = sections.find(s => s.id === id);
+      const section  = sections.find(s => s.id === id);
       if (!section) return json({ error: "section not found" }, corsHeaders, 404);
       if (title !== undefined) section.title = title;
       await env.PHOTO_KV.put(key, JSON.stringify(sections));
@@ -567,18 +581,17 @@ export default {
     if (request.method === "DELETE" && url.pathname === "/sections") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      const folderId = url.searchParams.get("folder_id");
+      const folderId  = url.searchParams.get("folder_id");
       const sectionId = url.searchParams.get("id");
       if (!folderId || !sectionId) return json({ error: "folder_id and id required" }, corsHeaders, 400);
 
-      const key = `sections:${folderId}`;
+      const key      = `sections:${folderId}`;
       const existing = await env.PHOTO_KV.get(key);
       if (existing) {
         const sections = JSON.parse(existing).filter(s => s.id !== sectionId);
         await env.PHOTO_KV.put(key, JSON.stringify(sections));
       }
 
-      // Снимаем секцию с фото которые были в этой секции
       const folder = await getFolder(env, folderId);
       if (folder) {
         for (const p of (folder.photos || [])) {
@@ -597,7 +610,7 @@ export default {
       const { folder_id, orders } = body;
       if (!folder_id || !orders) return json({ error: "folder_id and orders required" }, corsHeaders, 400);
 
-      const key = `sections:${folder_id}`;
+      const key      = `sections:${folder_id}`;
       const existing = await env.PHOTO_KV.get(key);
       if (!existing) return json({ success: true }, corsHeaders);
 
@@ -611,36 +624,29 @@ export default {
     }
 
     // ==========================================
-    // БЭКАП — обновлён под новую структуру
-    // Теперь бэкапим folder:* ключи (каждый содержит и метаданные папки, и все фото)
+    // БЭКАП
     // ==========================================
     if (request.method === "POST" && url.pathname === "/admin/backup") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
       const folderList = await env.PHOTO_KV.list({ prefix: `folder:` });
       const data = { folders: [], sections: [], created: new Date().toISOString(), schema: 2 };
-
-      // Читаем папки параллельно группами по 50
       const CHUNK = 50;
+
       for (let i = 0; i < folderList.keys.length; i += CHUNK) {
-        const chunk = folderList.keys.slice(i, i + CHUNK);
+        const chunk  = folderList.keys.slice(i, i + CHUNK);
         const values = await Promise.all(chunk.map(k => env.PHOTO_KV.get(k.name)));
         chunk.forEach((k, idx) => {
-          if (values[idx]) {
-            data.folders.push({ key: k.name, value: JSON.parse(values[idx]) });
-          }
+          if (values[idx]) data.folders.push({ key: k.name, value: JSON.parse(values[idx]) });
         });
       }
 
-      // Секции
       const sectionsList = await env.PHOTO_KV.list({ prefix: `sections:` });
       for (let i = 0; i < sectionsList.keys.length; i += CHUNK) {
-        const chunk = sectionsList.keys.slice(i, i + CHUNK);
+        const chunk  = sectionsList.keys.slice(i, i + CHUNK);
         const values = await Promise.all(chunk.map(k => env.PHOTO_KV.get(k.name)));
         chunk.forEach((k, idx) => {
-          if (values[idx]) {
-            data.sections.push({ key: k.name, value: JSON.parse(values[idx]) });
-          }
+          if (values[idx]) data.sections.push({ key: k.name, value: JSON.parse(values[idx]) });
         });
       }
 
@@ -649,21 +655,16 @@ export default {
 
     // ==========================================
     // ВОССТАНОВЛЕНИЕ ИЗ БЭКАПА
-    // Поддерживает оба формата: старый (schema 1) и новый (schema 2)
     // ==========================================
     if (request.method === "POST" && url.pathname === "/admin/restore") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
       const body = await request.json();
-      if (!body || !body.folders) {
-        return json({ error: "invalid backup format" }, corsHeaders, 400);
-      }
+      if (!body?.folders) return json({ error: "invalid backup format" }, corsHeaders, 400);
 
-      let restoredFolders = 0;
-      let restoredPhotos = 0;
+      let restoredFolders = 0, restoredPhotos = 0;
 
       if (body.schema === 2) {
-        // Новый формат: folder:ID содержит и папку, и фото
         for (const item of body.folders) {
           if (item.key && item.value) {
             await env.PHOTO_KV.put(item.key, JSON.stringify(item.value));
@@ -672,13 +673,9 @@ export default {
           }
         }
         for (const item of (body.sections || [])) {
-          if (item.key && item.value) {
-            await env.PHOTO_KV.put(item.key, JSON.stringify(item.value));
-          }
+          if (item.key && item.value) await env.PHOTO_KV.put(item.key, JSON.stringify(item.value));
         }
       } else {
-        // Старый формат (schema 1): folder:ID и photo:ID:photoID отдельно
-        // Конвертируем в новый формат при восстановлении
         const foldersMap = {};
         for (const item of body.folders) {
           if (item.key && item.value) {
@@ -689,20 +686,15 @@ export default {
         }
         for (const item of (body.photos || [])) {
           if (item.key && item.value) {
-            const parts = item.key.split(':');
+            const parts    = item.key.split(':');
             const folderId = parts[1];
-            const photoId = parts[2];
+            const photoId  = parts[2];
             if (foldersMap[folderId]) {
               foldersMap[folderId].photos.push({
-                id: photoId,
-                file_id: item.value.file_id,
-                name: item.value.name,
-                date: item.value.date,
-                deleted: item.value.deleted || false,
-                hidden: item.value.hidden || false,
-                order: item.value.order,
-                section_id: item.value.section_id,
-                schema: 2
+                id: photoId, file_id: item.value.file_id, name: item.value.name,
+                date: item.value.date, deleted: item.value.deleted || false,
+                hidden: item.value.hidden || false, order: item.value.order,
+                section_id: item.value.section_id, schema: 2
               });
               restoredPhotos++;
             }
@@ -713,36 +705,32 @@ export default {
         }
       }
 
-      // Пересобираем индекс
       await rebuildFoldersIndex(env);
-
       return json({ success: true, restoredFolders, restoredPhotos }, corsHeaders);
     }
 
     // ==========================================
-    // ИНФОРМАЦИЯ О ХРАНИЛИЩЕ (для просмотра в панели)
+    // ИНФОРМАЦИЯ О ХРАНИЛИЩЕ
     // ==========================================
     if (request.method === "GET" && url.pathname === "/admin/storage-info") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      const foldersIndex = await getFoldersIndex(env);
-      const folders = [];
-      let totalPhotos = 0;
-      let deletedPhotos = 0;
-
       const folderList = await env.PHOTO_KV.list({ prefix: `folder:` });
+      const folders = [];
+      let totalPhotos = 0, deletedPhotos = 0;
       const CHUNK = 50;
+
       for (let i = 0; i < folderList.keys.length; i += CHUNK) {
-        const chunk = folderList.keys.slice(i, i + CHUNK);
+        const chunk  = folderList.keys.slice(i, i + CHUNK);
         const values = await Promise.all(chunk.map(k => env.PHOTO_KV.get(k.name)));
         chunk.forEach((k, idx) => {
           if (values[idx]) {
-            const f = JSON.parse(values[idx]);
+            const f        = JSON.parse(values[idx]);
             const folderId = k.name.replace('folder:', '');
-            const photos = f.photos || [];
-            const active = photos.filter(p => !p.deleted).length;
-            const del = photos.filter(p => p.deleted).length;
-            totalPhotos += active;
+            const photos   = f.photos || [];
+            const active   = photos.filter(p => !p.deleted).length;
+            const del      = photos.filter(p => p.deleted).length;
+            totalPhotos   += active;
             deletedPhotos += del;
             folders.push({ id: folderId, title: f.title, hidden: f.hidden, photo_count: active });
           }
@@ -758,28 +746,23 @@ export default {
     if (request.method === "POST" && url.pathname === "/admin/clear-storage") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
 
-      let deletedFolders = 0;
-      let deletedPhotos = 0;
+      let deletedFolders = 0, deletedPhotos = 0;
 
       const folderList = await env.PHOTO_KV.list({ prefix: `folder:` });
       for (const key of folderList.keys) {
         const data = await env.PHOTO_KV.get(key.name);
-        if (data) {
-          const f = JSON.parse(data);
-          deletedPhotos += (f.photos || []).length;
-        }
+        if (data) deletedPhotos += (JSON.parse(data).photos || []).length;
         await env.PHOTO_KV.delete(key.name);
         deletedFolders++;
       }
 
-      // Удаляем индекс
       await env.PHOTO_KV.delete('folders_index');
 
-      // Удаляем секции
+      const thumbList = await env.PHOTO_KV.list({ prefix: `thumb:` });
+      for (const key of thumbList.keys) await env.PHOTO_KV.delete(key.name);
+
       const sectionsList = await env.PHOTO_KV.list({ prefix: `sections:` });
-      for (const key of sectionsList.keys) {
-        await env.PHOTO_KV.delete(key.name);
-      }
+      for (const key of sectionsList.keys) await env.PHOTO_KV.delete(key.name);
 
       return json({ success: true, deletedFolders, deletedPhotos }, corsHeaders);
     }
@@ -792,25 +775,18 @@ export default {
 // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ==========================================
 
-// Читает одну папку (с фото внутри) из KV
 async function getFolder(env, folderId) {
   const data = await env.PHOTO_KV.get(`folder:${folderId}`);
   if (!data) return null;
   return JSON.parse(data);
 }
 
-// Читает индекс всех папок (без фото — только метаданные)
-// Этот индекс используется для быстрой загрузки главной страницы
 async function getFoldersIndex(env) {
   const data = await env.PHOTO_KV.get('folders_index');
   if (data) return JSON.parse(data);
-
-  // Если индекса нет — строим его на лету
   return await rebuildFoldersIndex(env);
 }
 
-// Пересобирает индекс папок из актуальных данных
-// Вызывается после любого изменения папок
 async function rebuildFoldersIndex(env) {
   const list = await env.PHOTO_KV.list({ prefix: `folder:` });
   if (list.keys.length === 0) {
@@ -818,28 +794,26 @@ async function rebuildFoldersIndex(env) {
     return [];
   }
 
-  // Читаем все папки параллельно группами по 50
   const CHUNK = 50;
   const folders = [];
   for (let i = 0; i < list.keys.length; i += CHUNK) {
-    const chunk = list.keys.slice(i, i + CHUNK);
+    const chunk  = list.keys.slice(i, i + CHUNK);
     const values = await Promise.all(chunk.map(k => env.PHOTO_KV.get(k.name)));
     chunk.forEach((k, idx) => {
       if (values[idx]) {
-        const f = JSON.parse(values[idx]);
+        const f        = JSON.parse(values[idx]);
         const folderId = k.name.replace('folder:', '');
-        const photos = f.photos || [];
-        // В индекс кладём только метаданные (БЕЗ массива фото — он нам здесь не нужен)
+        const photos   = f.photos || [];
         folders.push({
-          id: folderId,
-          title: f.title,
-          hidden: f.hidden || false,
-          order: f.order || 0,
-          cover_url: f.cover_url || null,
-          cover_x: f.cover_x !== undefined ? f.cover_x : 50,
-          cover_y: f.cover_y !== undefined ? f.cover_y : 50,
-          cover_scale: f.cover_scale !== undefined ? f.cover_scale : 100,
-          photo_count: photos.filter(p => !p.deleted && !p.hidden).length,
+          id:              folderId,
+          title:           f.title,
+          hidden:          f.hidden || false,
+          order:           f.order  || 0,
+          cover_url:       f.cover_url   || null,
+          cover_x:         f.cover_x     !== undefined ? f.cover_x     : 50,
+          cover_y:         f.cover_y     !== undefined ? f.cover_y     : 50,
+          cover_scale:     f.cover_scale !== undefined ? f.cover_scale : 100,
+          photo_count:       photos.filter(p => !p.deleted && !p.hidden).length,
           photo_count_admin: photos.filter(p => !p.deleted).length
         });
       }
@@ -850,35 +824,28 @@ async function rebuildFoldersIndex(env) {
   return folders;
 }
 
-// Обновляет одну папку в индексе (быстро, без полной пересборки)
 async function updateFolderInIndex(env, folderId, folderData) {
   const indexData = await env.PHOTO_KV.get('folders_index');
   if (!indexData) return;
 
-  const index = JSON.parse(indexData);
+  const index    = JSON.parse(indexData);
   const existing = index.find(f => f.id === folderId);
   if (!existing) return;
 
   const photos = folderData.photos || [];
-  existing.photo_count = photos.filter(p => !p.deleted && !p.hidden).length;
+  existing.photo_count       = photos.filter(p => !p.deleted && !p.hidden).length;
   existing.photo_count_admin = photos.filter(p => !p.deleted).length;
-  existing.hidden = folderData.hidden || false;
-  existing.title = folderData.title;
-  existing.cover_url = folderData.cover_url || null;
-  existing.cover_x = folderData.cover_x !== undefined ? folderData.cover_x : 50;
-  existing.cover_y = folderData.cover_y !== undefined ? folderData.cover_y : 50;
+  existing.hidden      = folderData.hidden      || false;
+  existing.title       = folderData.title;
+  existing.cover_url   = folderData.cover_url   || null;
+  existing.cover_x     = folderData.cover_x     !== undefined ? folderData.cover_x     : 50;
+  existing.cover_y     = folderData.cover_y     !== undefined ? folderData.cover_y     : 50;
   existing.cover_scale = folderData.cover_scale !== undefined ? folderData.cover_scale : 100;
 
   await env.PHOTO_KV.put('folders_index', JSON.stringify(index));
 }
 
-// ==========================================
-// ПОЛУЧЕНИЕ ТОКЕНА GOOGLE — с кешированием!
-// БЫЛО: каждый запрос = новый JWT + HTTP запрос к Google
-// СТАЛО: токен кешируется в KV на 55 минут
-// ==========================================
 async function getGoogleAccessToken(env) {
-  // Проверяем кеш токена
   const cached = await env.PHOTO_KV.get('google_access_token');
   if (cached) return cached;
 
@@ -886,7 +853,6 @@ async function getGoogleAccessToken(env) {
 
   const header = btoa(JSON.stringify({ alg: "RS256", typ: "JWT" }))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-
   const claim = btoa(JSON.stringify({
     iss: env.GOOGLE_CLIENT_EMAIL,
     scope: "https://www.googleapis.com/auth/drive",
@@ -897,7 +863,7 @@ async function getGoogleAccessToken(env) {
 
   const signingInput = `${header}.${claim}`;
 
-  const pemKey = env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+  const pemKey  = env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
   const keyBody = pemKey
     .replace('-----BEGIN PRIVATE KEY-----', '')
     .replace('-----END PRIVATE KEY-----', '')
@@ -911,8 +877,7 @@ async function getGoogleAccessToken(env) {
   );
 
   const signature = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5',
-    cryptoKey,
+    'RSASSA-PKCS1-v1_5', cryptoKey,
     new TextEncoder().encode(signingInput)
   );
 
@@ -932,9 +897,7 @@ async function getGoogleAccessToken(env) {
     throw new Error('Не удалось получить токен Google: ' + JSON.stringify(tokenData));
   }
 
-  // Сохраняем токен в KV на 55 минут (токен живёт 60 мин, берём с запасом)
   await env.PHOTO_KV.put('google_access_token', tokenData.access_token, { expirationTtl: 3300 });
-
   return tokenData.access_token;
 }
 

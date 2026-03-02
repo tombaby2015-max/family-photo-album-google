@@ -983,7 +983,7 @@ var gallery = {
             imgs[i].src = '';
             this._fvSetPos(imgs[i], 100, false);
         }
-        imgs[0].src = this.visiblePhotos[index].thumbUrl || '';
+        imgs[0].src = this.visiblePhotos[index].originalUrl || this.visiblePhotos[index].thumbUrl || '';
         this._fvSetPos(imgs[0], 0, false);
 
         this._updateActionsPanel(this.visiblePhotos[index]);
@@ -1038,7 +1038,7 @@ var gallery = {
         var enterFrom = direction === 'left' ? 160  : -160;
         var DURATION  = 280;
 
-        imgs[nextSlot].src = self.visiblePhotos[newIndex].thumbUrl || '';
+        imgs[nextSlot].src = self.visiblePhotos[newIndex].originalUrl || self.visiblePhotos[newIndex].thumbUrl || '';
         imgs[nextSlot].style.transition = 'none';
         imgs[nextSlot].style.transform  = 'translateX(' + enterFrom + '%)';
         imgs[nextSlot].style.opacity    = '0';

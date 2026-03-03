@@ -16,7 +16,7 @@ var CACHE_KEY_FOLDERS = 'photo_cache_folders';
 var CACHE_TTL = 30 * 60 * 1000; // 30 минут в миллисекундах
 // Версия должна совпадать с CACHE_NAME в sw.js
 // При смене версии кэша SW — старые метки загрузки автоматически игнорируются
-var THUMB_CACHE_VERSION = 'v4';
+var THUMB_CACHE_VERSION = 'v5';
 var CACHE_KEY_LOADED_FOLDERS = 'photo_loaded_folders_' + THUMB_CACHE_VERSION;
 
 // ==========================================

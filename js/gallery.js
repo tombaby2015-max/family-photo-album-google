@@ -34,6 +34,11 @@ var CACHE_KEY_LOADED_FOLDERS = 'photo_loaded_folders_' + THUMB_CACHE_VERSION;
   navigator.serviceWorker.register('/family-photo-album-google/sw.js').then(function(registration) {
     console.log('[SW] Зарегистрирован, scope:', registration.scope);
 
+    // Разблокируем поворот экрана для PWA на Android
+    if (screen.orientation && screen.orientation.unlock) {
+      screen.orientation.unlock();
+    }
+
     // Если есть обновление SW — активируем его
     registration.addEventListener('updatefound', function() {
       var newWorker = registration.installing;

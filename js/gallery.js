@@ -635,7 +635,7 @@ var gallery = {
                         || ('https://drive.google.com/uc?id=' + allPhotos[i].file_id);
 
                     // Ссылка для скачивания — drive.google.com с параметром export=download
-                    allPhotos[i].downloadUrl = 'https://drive.google.com/uc?id=' + allPhotos[i].file_id + '&export=download';
+                    allPhotos[i].downloadUrl = 'https://drive.google.com/file/d/' + allPhotos[i].file_id + '/view';
                 }
 
                 if (container) container.innerHTML = '';

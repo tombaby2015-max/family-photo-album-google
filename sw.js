@@ -124,6 +124,9 @@ self.addEventListener('fetch', function(event) {
           if (response.ok) {
             cache.put(event.request, response.clone());
             console.log('[SW] Закешировано:', url.split('?')[1]);
+          } else {
+            // Не кешируем ошибки (404, 503 и т.д.) — при следующем запросе попробуем снова
+            console.warn('[SW] Ошибка ' + response.status + ', не кешируем:', url.split('?')[1]);
           }
           return response;
         }).catch(function(err) {

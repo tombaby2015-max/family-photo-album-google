@@ -6,7 +6,7 @@
 // ИСПРАВЛЕНО: очередь запросов MAX_CONCURRENT=4, повтор при ошибке до 3 раз
 
 const CACHE_NAME = 'photo-thumbs-v5';
-const THUMB_PATTERN = /\/photo\?.*size=thumb/;
+const THUMB_PATTERN = /\/photo\?.*size=(thumb|cover)/;
 
 // ==========================================
 // ОЧЕРЕДЬ — не более 4 параллельных загрузок

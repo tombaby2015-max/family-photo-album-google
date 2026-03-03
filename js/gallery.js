@@ -635,9 +635,7 @@ var gallery = {
                         || ('https://drive.google.com/uc?id=' + allPhotos[i].file_id);
 
                     // Ссылка для скачивания — drive.google.com с параметром export=download
-                    var folderName = (gallery.currentFolder && gallery.currentFolder.title) ? encodeURIComponent(gallery.currentFolder.title) : '';
-var photoName = encodeURIComponent(allPhotos[i].name || 'photo.jpg');
-allPhotos[i].downloadUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName + '&name=' + photoName;
+                    allPhotos[i].downloadUrl = 'https://drive.google.com/file/d/' + allPhotos[i].file_id + '/view';
                 }
 
                 if (container) container.innerHTML = '';

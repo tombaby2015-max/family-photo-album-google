@@ -533,8 +533,7 @@ function loadNext() {
                 if (observer) observer.disconnect();
                         setTimeout(function() {
                             self._hideFirstLoadBanner(folderId);
-                            self._prefetchOriginalsSequentially();
-                        }, 800);
+                            }, 800);
             }
         }
 

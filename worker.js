@@ -1,7 +1,7 @@
 // worker.js
 //
 // СТРУКТУРА KV:
-//   folder:ABC        → { title, hidden, order, cover_url, ..., photos: [...с thumbnailLink] }
+//   folder:ABC        → { title, hidden, order, cover_url, ..., photos: [...с thumbnailLink, viewLink] }
 //   folders_index     → [ ...все папки для главной страницы ]
 //   sections:ABC      → [ ...секции папки ]
 //   thumb:FILE_ID     → thumbnailLink (создаётся лениво при первом запросе миниатюры, TTL 30 дней)
@@ -15,6 +15,12 @@
 //                       Следующие запросы — мгновенный KV.get без чтения папки.
 //   Memory cache (Map) — защита от stampede: повторные запросы в рамках одного
 //                        инстанса воркера не делают лишних KV.get
+//
+// ОРИГИНАЛЫ:
+//   Worker больше НЕ проксирует оригинальные фото через alt=media.
+//   /sync сохраняет viewLink = thumbnailLink с параметром =w2048 (Google CDN).
+//   /photos/urls возвращает drive.google.com/uc?id=FILE_ID&export=download для скачивания.
+//   Браузер загружает фото напрямую с серверов Google — без участия Worker.
 
 // Улучшение 1: memory cache против stampede
 const thumbMemoryCache = new Map();
@@ -43,22 +49,48 @@ export default {
     const isAdmin = token ? !!(await env.PHOTO_KV.get(`admin_token:${token}`)) : false;
 
     // ==========================================
-    // ПОКАЗ ФОТО
+    // ПОКАЗ ФОТО (только миниатюры)
+    //
+    // size=original и size=view УДАЛЕНЫ.
+    // Worker больше не проксирует оригиналы через alt=media.
+    // Оригиналы отдаются через viewLink (Google CDN) напрямую браузеру.
     // ==========================================
     if (request.method === "GET" && url.pathname === "/photo") {
       const fileId = url.searchParams.get("id");
       const size   = url.searchParams.get("size") || "thumb";
-      const folderName = url.searchParams.get("folder") || "";
-      const folderId   = url.searchParams.get("folder_id") || "";
+      const folderId = url.searchParams.get("folder_id") || "";
 
       if (!fileId) return new Response("id required", { status: 400 });
 
-      // --- МИНИАТЮРЫ: ленивое кеширование ---
-      if (size === "thumb") {
+      // Только миниатюры — остальное браузер грузит напрямую с Google
+      if (size !== "thumb") {
+        return new Response("Direct Google links should be used for originals", { status: 400, headers: corsHeaders });
+      }
 
-        // 1. Быстрый путь — memory cache (защита от stampede)
-if (thumbMemoryCache.has(fileId)) {
-          const thumbUrl = thumbMemoryCache.get(fileId).replace(/=s\d+$/, '=s400');
+      // --- МИНИАТЮРЫ: ленивое кеширование ---
+
+      // 1. Быстрый путь — memory cache (защита от stampede)
+      if (thumbMemoryCache.has(fileId)) {
+        const thumbUrl = thumbMemoryCache.get(fileId).replace(/=s\d+$/, '=s400');
+        const googleResp = await fetch(thumbUrl);
+        if (!googleResp.ok) {
+          return new Response("Thumbnail not available", { status: 404, headers: corsHeaders });
+        }
+        return new Response(googleResp.body, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": googleResp.headers.get("content-type") || "image/jpeg",
+            "Cache-Control": "public, max-age=86400",
+          }
+        });
+      }
+
+      // 2. Быстрый путь — уже есть в KV
+      const cached = await env.PHOTO_KV.get(`thumb:${fileId}`);
+      if (cached) {
+        if (cached.startsWith('https://')) {
+          thumbMemoryCache.set(fileId, cached);
+          const thumbUrl = cached.replace(/=s\d+$/, '=s400');
           const googleResp = await fetch(thumbUrl);
           if (!googleResp.ok) {
             return new Response("Thumbnail not available", { status: 404, headers: corsHeaders });
@@ -71,120 +103,57 @@ if (thumbMemoryCache.has(fileId)) {
             }
           });
         }
+        // Мусор в KV — удаляем и идём дальше
+        ctx.waitUntil(env.PHOTO_KV.delete(`thumb:${fileId}`));
+      }
 
-        // 2. Быстрый путь — уже есть в KV
-        const cached = await env.PHOTO_KV.get(`thumb:${fileId}`);
-        if (cached) {
-          // Улучшение 3: валидация перед использованием закешированного значения
-if (cached.startsWith('https://')) {
-            thumbMemoryCache.set(fileId, cached);
-            const thumbUrl = cached.replace(/=s\d+$/, '=s400');
-            const googleResp = await fetch(thumbUrl);
-            if (!googleResp.ok) {
-              return new Response("Thumbnail not available", { status: 404, headers: corsHeaders });
-            }
-            return new Response(googleResp.body, {
-              headers: {
-                ...corsHeaders,
-                "Content-Type": googleResp.headers.get("content-type") || "image/jpeg",
-                "Cache-Control": "public, max-age=86400",
-              }
-            });
-          }
-          // Мусор в KV — удаляем и идём дальше
-          ctx.waitUntil(env.PHOTO_KV.delete(`thumb:${fileId}`));
+      // 3. Медленный путь — ищем thumbnailLink в папке (один раз за всю жизнь фото)
+      let thumbLink = null;
+
+      if (folderId) {
+        // Знаем папку — 1 KV.get
+        const folder = await getFolder(env, folderId);
+        if (folder?.photos) {
+          const photo = folder.photos.find(p => p.file_id === fileId);
+          if (photo?.thumbnailLink) thumbLink = photo.thumbnailLink;
         }
+      }
 
-        // 3. Медленный путь — ищем thumbnailLink в папке (один раз за всю жизнь фото)
-        let thumbLink = null;
-
-        if (folderId) {
-          // Знаем папку — 1 KV.get
-          const folder = await getFolder(env, folderId);
+      if (!thumbLink) {
+        // Не знаем папку — перебираем индекс (редкий случай)
+        const index = await getFoldersIndex(env);
+        for (const meta of index) {
+          const folder = await getFolder(env, meta.id);
           if (folder?.photos) {
             const photo = folder.photos.find(p => p.file_id === fileId);
-            if (photo?.thumbnailLink) thumbLink = photo.thumbnailLink;
+            if (photo?.thumbnailLink) { thumbLink = photo.thumbnailLink; break; }
           }
         }
-
-        if (!thumbLink) {
-          // Не знаем папку — перебираем индекс (редкий случай)
-          const index = await getFoldersIndex(env);
-          for (const meta of index) {
-            const folder = await getFolder(env, meta.id);
-            if (folder?.photos) {
-              const photo = folder.photos.find(p => p.file_id === fileId);
-              if (photo?.thumbnailLink) { thumbLink = photo.thumbnailLink; break; }
-            }
-          }
-        }
-
-        // Улучшение 3: валидация thumbnailLink перед кешированием
-if (thumbLink && thumbLink.startsWith('https://')) {
-          thumbMemoryCache.set(fileId, thumbLink);
-
-          ctx.waitUntil(
-            env.PHOTO_KV.put(`thumb:${fileId}`, thumbLink, { expirationTtl: 60 * 60 * 24 * 30 })
-          );
-
-          const thumbUrl = thumbLink.replace(/=s\d+$/, '=s400');
-          const googleResp = await fetch(thumbUrl);
-          if (!googleResp.ok) {
-            return new Response("Thumbnail not available", { status: 404, headers: corsHeaders });
-          }
-          const contentType = googleResp.headers.get("content-type") || "image/jpeg";
-          return new Response(googleResp.body, {
-            headers: {
-              ...corsHeaders,
-              "Content-Type": contentType,
-              "Cache-Control": "public, max-age=86400",
-            }
-          });
-        }
-
-        // thumbnailLink не найден — fallback: проксируем оригинал
-        console.log('[thumb] thumbnailLink не найден для', fileId, '— fallback на оригинал');
       }
 
-      // --- ОРИГИНАЛЫ и fallback ---
-      const cache = caches.default;
-      const cacheKey = new Request(`${workerBase}/photo?id=${fileId}&size=${size}`);
-      const cachedResp = await cache.match(cacheKey);
-      if (cachedResp && size !== "original") return cachedResp;
+      if (thumbLink && thumbLink.startsWith('https://')) {
+        thumbMemoryCache.set(fileId, thumbLink);
 
-      try {
-        const accessToken = await getGoogleAccessToken(env);
-        const photoName   = url.searchParams.get("name") || "photo.jpg";
-
-        const resp = await fetch(
-          `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-          { headers: { Authorization: `Bearer ${accessToken}` } }
+        ctx.waitUntil(
+          env.PHOTO_KV.put(`thumb:${fileId}`, thumbLink, { expirationTtl: 60 * 60 * 24 * 30 })
         );
 
-        if (!resp.ok) {
-          return new Response("Фото не найдено", { status: 404, headers: corsHeaders });
+        const thumbUrl = thumbLink.replace(/=s\d+$/, '=s400');
+        const googleResp = await fetch(thumbUrl);
+        if (!googleResp.ok) {
+          return new Response("Thumbnail not available", { status: 404, headers: corsHeaders });
         }
-
-        const contentType = resp.headers.get("content-type") || "image/jpeg";
-        const headers = {
-          ...corsHeaders,
-          "Content-Type": contentType,
-          "Cache-Control": "public, max-age=604800",
-        };
-
-        if (size === "original") {
-          const decodedFolder = folderName ? decodeURIComponent(folderName) : "";
-          const downloadName  = decodedFolder ? `${decodedFolder} — ${photoName}` : photoName;
-          headers["Content-Disposition"] = `attachment; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
-        }
-
-        const response = new Response(resp.body, { headers });
-        if (size !== "original") ctx.waitUntil(cache.put(cacheKey, response.clone()));
-        return response;
-
-      } catch (e) {
-        return new Response("Ошибка: " + e.message, { status: 500, headers: corsHeaders });
+        const contentType = googleResp.headers.get("content-type") || "image/jpeg";
+        return new Response(googleResp.body, {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": contentType,
+            "Cache-Control": "public, max-age=86400",
+          }
+        });
       }
+
+      return new Response("Thumbnail not found", { status: 404, headers: corsHeaders });
     }
 
     // ==========================================
@@ -239,15 +208,37 @@ if (thumbLink && thumbLink.startsWith('https://')) {
     }
 
     // ==========================================
-    // ССЫЛКИ ДЛЯ СКАЧИВАНИЯ (оригиналы)
+    // ССЫЛКИ ДЛЯ ПРОСМОТРА И СКАЧИВАНИЯ (оригиналы)
+    //
+    // Worker больше не проксирует байты.
+    // viewLink  — Google CDN (lh3.googleusercontent.com), для показа в браузере.
+    // downloadUrl — drive.google.com/uc?export=download, для скачивания.
+    // Оба варианта требуют "Anyone with link → Viewer" на папку в Drive.
     // ==========================================
     if (request.method === "POST" && url.pathname === "/photos/urls") {
       const body   = await request.json();
       const photos = body.photos || [];
+      const folderId = body.folder_id || "";
+
+      // Читаем папку один раз — нужны viewLink
+      let folderPhotosMap = {};
+      if (folderId) {
+        const folder = await getFolder(env, folderId);
+        if (folder?.photos) {
+          for (const p of folder.photos) {
+            folderPhotosMap[p.file_id] = p;
+          }
+        }
+      }
 
       const urls = {};
       for (const photo of photos) {
-        urls[photo.id] = `${workerBase}/photo?id=${photo.file_id}&size=original`;
+        const stored = folderPhotosMap[photo.file_id];
+        // viewLink предпочтительнее — Google CDN, быстро, без OAuth
+        // Fallback: drive.google.com/uc (работает для расшаренных файлов)
+        const viewUrl = stored?.viewLink
+          || `https://drive.google.com/uc?id=${photo.file_id}`;
+        urls[photo.id] = viewUrl;
       }
       return json({ urls }, corsHeaders);
     }
@@ -271,6 +262,9 @@ if (thumbLink && thumbLink.startsWith('https://')) {
     // ⚠️ thumb: ключи здесь НЕ создаются намеренно.
     // thumbnailLink сохраняется только внутри объекта фото в папке.
     // thumb: ключ создастся лениво при первом запросе миниатюры.
+    //
+    // viewLink формируется из thumbnailLink: меняем параметр размера на =w2048.
+    // Это ссылка на Google CDN (lh3.googleusercontent.com) — без OAuth, мгновенно.
     // ==========================================
     if (request.method === "POST" && url.pathname === "/sync") {
       if (!isAdmin) return json({ error: "unauthorized" }, corsHeaders, 401);
@@ -336,7 +330,11 @@ if (thumbLink && thumbLink.startsWith('https://')) {
           for (const dp of drivePhotos) {
             if (existingPhotosMap[dp.id]) {
               const ep = existingPhotosMap[dp.id];
-              if (dp.thumbnailLink) ep.thumbnailLink = dp.thumbnailLink;
+              if (dp.thumbnailLink) {
+                ep.thumbnailLink = dp.thumbnailLink;
+                // viewLink = Google CDN, параметр размера w2048 вместо s128
+                ep.viewLink = dp.thumbnailLink.replace(/=s\d+$/, '=w2048');
+              }
               newPhotos.push(ep);
             } else {
               const np = {
@@ -348,7 +346,11 @@ if (thumbLink && thumbLink.startsWith('https://')) {
                 hidden: false,
                 schema: 2
               };
-              if (dp.thumbnailLink) np.thumbnailLink = dp.thumbnailLink;
+              if (dp.thumbnailLink) {
+                np.thumbnailLink = dp.thumbnailLink;
+                // viewLink сохраняется при синхронизации — Worker не нужен для просмотра
+                np.viewLink = dp.thumbnailLink.replace(/=s\d+$/, '=w2048');
+              }
               newPhotos.push(np);
               syncedPhotos++;
             }

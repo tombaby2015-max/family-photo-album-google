@@ -269,7 +269,7 @@ var gallery = {
         if (!imgEl) return;
 
         if (folder.cover_url) {
-            var thumbUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=thumb';
+            var thumbUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + folder.cover_url + '&size=cover';
             self.applyFolderCover(imgEl, thumbUrl, folder);
         }
     },
@@ -443,6 +443,31 @@ var gallery = {
         this._markFolderLoaded(folderId);
     },
 
+    // Последовательная prefetch-загрузка оригиналов через SW после показа миниатюр.
+    // Загружает по одному фото в порядке отображения в сетке.
+    // SW перехватит запросы и закеширует — при открытии fullscreen фото будет мгновенным.
+    _prefetchOriginalsSequentially: function() {
+        var self = this;
+        var photos = self.visiblePhotos;
+        if (!photos || photos.length === 0) return;
+        if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return;
+
+        var index = 0;
+
+        function loadNext() {
+            if (index >= photos.length) return;
+            var photo = photos[index];
+            index++;
+            if (!photo.viewUrl) { loadNext(); return; }
+            var img = new Image();
+            img.onload  = loadNext;
+            img.onerror = loadNext;
+            img.src = photo.viewUrl;
+        }
+
+        loadNext();
+    },
+
     // Трекер для обложек папок (background-image — onload не работает, используем Image())
     _trackFolderCovers: function(folders) {
         var self = this;
@@ -501,9 +526,10 @@ var gallery = {
             if (counter) counter.textContent = loaded + ' / ' + total;
             if (loaded >= total) {
                 if (observer) observer.disconnect();
-                setTimeout(function() {
-                    self._hideFirstLoadBanner(folderId);
-                }, 800);
+                        setTimeout(function() {
+                            self._hideFirstLoadBanner(folderId);
+                            self._prefetchOriginalsSequentially();
+                        }, 800);
             }
         }
 

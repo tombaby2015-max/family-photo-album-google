@@ -454,14 +454,14 @@ var gallery = {
 
         var index = 0;
 
-        function loadNext() {
+function loadNext() {
             if (index >= photos.length) return;
             var photo = photos[index];
             index++;
             if (!photo.viewUrl) { loadNext(); return; }
             var img = new Image();
-            img.onload  = loadNext;
-            img.onerror = loadNext;
+            img.onload  = function() { setTimeout(loadNext, 500); };
+            img.onerror = function() { setTimeout(loadNext, 500); };
             img.src = photo.viewUrl;
         }
 

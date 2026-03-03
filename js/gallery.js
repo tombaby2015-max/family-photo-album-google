@@ -6,6 +6,10 @@
 //    не сбрасывается при деплоях воркера, живёт пока браузер сам не очистит кеш.
 // 2. Добавлена диагностика: gallery.debugCacheStats() в консоли
 // 3. Логика localStorage кеша для папок не изменилась
+// 4. Оригиналы фото больше НЕ проксируются через Worker.
+//    viewLink (lh3.googleusercontent.com =w2048) — для показа в fullscreen.
+//    downloadUrl (drive.google.com/uc?export=download) — для скачивания.
+//    Браузер загружает фото напрямую с Google CDN без участия Worker.
 
 // Настройки кеша
 var CACHE_KEY_FOLDERS = 'photo_cache_folders';
@@ -623,9 +627,15 @@ var gallery = {
             api.getPhotosThumbnails(folderId, allPhotos).then(function(thumbUrls) {
                 for (var i = 0; i < allPhotos.length; i++) {
                     allPhotos[i].thumbUrl = thumbUrls[allPhotos[i].id] || '';
-                    var folderName = (gallery.currentFolder && gallery.currentFolder.title) ? encodeURIComponent(gallery.currentFolder.title) : '';
-                    var photoName = encodeURIComponent(allPhotos[i].name || 'photo.jpg');
-                    allPhotos[i].originalUrl = 'https://photo-backend.belovolov-email.workers.dev/photo?id=' + allPhotos[i].file_id + '&size=original&folder=' + folderName + '&name=' + photoName;
+
+                    // Оригиналы: используем viewLink из KV (Google CDN, без Worker).
+                    // Fallback: drive.google.com/uc (работает для расшаренных файлов).
+                    // Worker больше не участвует в доставке оригинальных фото.
+                    allPhotos[i].viewUrl = allPhotos[i].viewLink
+                        || ('https://drive.google.com/uc?id=' + allPhotos[i].file_id);
+
+                    // Ссылка для скачивания — drive.google.com с параметром export=download
+                    allPhotos[i].downloadUrl = 'https://drive.google.com/uc?id=' + allPhotos[i].file_id + '&export=download';
                 }
 
                 if (container) container.innerHTML = '';
@@ -983,7 +993,9 @@ var gallery = {
             imgs[i].src = '';
             this._fvSetPos(imgs[i], 100, false);
         }
-        imgs[0].src = this.visiblePhotos[index].originalUrl || this.visiblePhotos[index].thumbUrl || '';
+
+        // Используем viewUrl (Google CDN) — браузер грузит напрямую, Worker не участвует
+        imgs[0].src = this.visiblePhotos[index].viewUrl || this.visiblePhotos[index].thumbUrl || '';
         this._fvSetPos(imgs[0], 0, false);
 
         this._updateActionsPanel(this.visiblePhotos[index]);
@@ -1038,7 +1050,8 @@ var gallery = {
         var enterFrom = direction === 'left' ? 160  : -160;
         var DURATION  = 280;
 
-        imgs[nextSlot].src = self.visiblePhotos[newIndex].originalUrl || self.visiblePhotos[newIndex].thumbUrl || '';
+        // Используем viewUrl — Google CDN, без Worker
+        imgs[nextSlot].src = self.visiblePhotos[newIndex].viewUrl || self.visiblePhotos[newIndex].thumbUrl || '';
         imgs[nextSlot].style.transition = 'none';
         imgs[nextSlot].style.transform  = 'translateX(' + enterFrom + '%)';
         imgs[nextSlot].style.opacity    = '0';
@@ -1076,9 +1089,10 @@ var gallery = {
         if (!panel) return;
         var isAdmin = api.isAdmin();
 
+        // downloadUrl — drive.google.com/uc?export=download, скачивается напрямую с Google
         panel.innerHTML =
             (isAdmin ? '<button class="fv-action-btn" onclick="admin.setFolderCover()"><i data-lucide="image"></i><span>Обложка</span></button>' : '') +
-            '<a id="download-link" class="fv-action-btn" href="' + (photo.originalUrl || '#') + '"><i data-lucide="download"></i><span>Скачать</span></a>' +
+            '<a id="download-link" class="fv-action-btn" href="' + (photo.downloadUrl || '#') + '" target="_blank" rel="noopener"><i data-lucide="download"></i><span>Скачать</span></a>' +
             (isAdmin ? '<button class="fv-action-btn fv-action-btn--danger" onclick="admin.deleteCurrentPhoto()"><i data-lucide="trash-2"></i><span>Удалить</span></button>' : '') +
             '<button class="fv-action-btn" onclick="gallery.closeFullscreen()"><i data-lucide="x"></i><span>Закрыть</span></button>';
     },

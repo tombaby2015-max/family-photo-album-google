@@ -448,7 +448,24 @@ var gallery = {
         this._markFolderLoaded(folderId);
     },
 
+_prefetchOriginalsSequentially: function() {
+        var self = this;
+        var photos = self.visiblePhotos;
+        if (!photos || photos.length === 0) return;
 
+        var index = 0;
+        function loadNext() {
+            if (index >= photos.length) return;
+            var photo = photos[index];
+            index++;
+            if (!photo.viewUrl) { loadNext(); return; }
+            var img = new Image();
+            img.onload  = function() { setTimeout(loadNext, 500); };
+            img.onerror = function() { setTimeout(loadNext, 500); };
+            img.src = photo.viewUrl;
+        }
+        loadNext();
+    },
 
     // Трекер для обложек папок (background-image — onload не работает, используем Image())
     _trackFolderCovers: function(folders) {
@@ -509,8 +526,9 @@ var gallery = {
             if (loaded >= total) {
                 if (observer) observer.disconnect();
                         setTimeout(function() {
-                            self._hideFirstLoadBanner(folderId);
-                            }, 800); 
+                    self._hideFirstLoadBanner(folderId);
+                    self._prefetchOriginalsSequentially();
+                    }, 800); 
             }
         }
 

@@ -635,7 +635,12 @@ var gallery = {
                         || ('https://drive.google.com/uc?id=' + allPhotos[i].file_id);
 
                     // Ссылка для скачивания — drive.google.com с параметром export=download
-                    allPhotos[i].downloadUrl = 'https://drive.google.com/file/d/' + allPhotos[i].file_id + '/view';
+                    allPhotos[i].downloadUrl =
+                        'https://photo-backend.belovolov-email.workers.dev/photo' +
+                        '?id='     + allPhotos[i].file_id +
+                        '&size=original' +
+                        '&folder=' + encodeURIComponent(self.currentFolder ? self.currentFolder.title : '') +
+                        '&name='   + encodeURIComponent(allPhotos[i].name || (allPhotos[i].file_id + '.jpg'));
                 }
 
                 if (container) container.innerHTML = '';

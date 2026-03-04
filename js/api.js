@@ -73,10 +73,11 @@ var api = {
         console.log('[API] /folders data:', JSON.stringify(data).substring(0, 200));
         return data.folders || [];
     })
-    .catch(function(e) {
-        console.error('[API] /folders error:', e);
-        return [];
-    });
+.catch(function(e) {
+    console.error('[API] /folders error:', e.message, e.name);
+    return [];
+});
+       
 },
 
     updateFolder: function(folderId, updates) {

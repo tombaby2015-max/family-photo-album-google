@@ -62,13 +62,22 @@ var api = {
     },
 
     // === ПАПКИ ===
-    getFolders: function() {
-        return fetch(API_BASE + '/folders', {
-            headers: this.getHeaders(this.isAdmin())
-        }).then(function(r) { return r.json(); })
-          .then(function(data) { return data.folders || []; })
-          .catch(function() { return []; });
-    },
+   getFolders: function() {
+    return fetch(API_BASE + '/folders', {
+        headers: this.getHeaders(this.isAdmin())
+    }).then(function(r) {
+        console.log('[API] /folders status:', r.status);
+        return r.json();
+    })
+    .then(function(data) {
+        console.log('[API] /folders data:', JSON.stringify(data).substring(0, 200));
+        return data.folders || [];
+    })
+    .catch(function(e) {
+        console.error('[API] /folders error:', e);
+        return [];
+    });
+},
 
     updateFolder: function(folderId, updates) {
         var body = { id: folderId };
